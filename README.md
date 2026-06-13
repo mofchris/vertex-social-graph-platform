@@ -62,4 +62,7 @@ Routes: `/` (landing), `/login` (sign in), `/signup` (create account).
 
 - ✅ Frontend showcase — landing, architecture overview, auth pages
 - ✅ Systems-design docs — `PROJECT.md`, `EDGE_CASES.md`
-- 🚧 Backend services — being built out service by service (Identity first)
+- ✅ **Identity service** (`services/identity`) — signup/login, JWT access tokens,
+  refresh-token rotation with reuse detection; runs on embedded H2 or Postgres. See
+  [its README](./services/identity/README.md).
+- 🚧 Other services (Profile, Graph, Feed, Recommend, Notify) — next
