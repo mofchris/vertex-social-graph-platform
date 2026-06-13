@@ -69,4 +69,7 @@ Routes: `/` (landing), `/login` (sign in), `/signup` (create account).
   with serve-time privacy (public/friends/private); verifies Identity's JWTs. Runs on
   embedded H2 + in-process cache, or Postgres + Redis. See
   [its README](./services/profile/README.md).
-- 🚧 Other services (Graph, Feed, Recommend, Notify) — next
+- ✅ **Graph service** (`services/graph`) — the social graph: follows, friend requests
+  (state machine, crossing-request auto-accept), blocks (block-wins), relationship/counts,
+  cursor-paginated friends. See [its README](./services/graph/README.md).
+- 🚧 Other services (Feed, Recommend, Notify) — next
