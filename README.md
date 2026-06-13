@@ -1,5 +1,7 @@
 # Vertex — Distributed Social Graph & Identity Platform
 
+[![CI](https://github.com/mofchris/vertex-social-graph-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/mofchris/vertex-social-graph-platform/actions/workflows/ci.yml)
+
 A scalable backend platform that manages user **identities**, **relationships**, and
 **real-time social interactions** for millions of users — built as a microservices system
 to demonstrate distributed-systems design, caching strategy, cloud-native deployment, and
