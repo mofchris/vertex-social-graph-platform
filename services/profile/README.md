@@ -63,15 +63,19 @@ Observability: `GET /actuator/health`, `GET /actuator/prometheus`.
 `visibility` is one of `PUBLIC`, `FRIENDS`, `PRIVATE`. It is enforced **at serve time**, per
 viewer — never baked into the cached value.
 
-| Visibility | Owner | Other authenticated user | Anonymous |
-|------------|-------|--------------------------|-----------|
-| PUBLIC     | ✅    | ✅                       | ✅        |
-| FRIENDS    | ✅    | ❌ (until Graph exists)  | ❌        |
-| PRIVATE    | ✅    | ❌                       | ❌        |
+| Visibility | Owner | Friend | Other authenticated user | Anonymous |
+|------------|-------|--------|--------------------------|-----------|
+| PUBLIC     | ✅    | ✅     | ✅                       | ✅        |
+| FRIENDS    | ✅    | ✅     | ❌                       | ❌        |
+| PRIVATE    | ✅    | ❌     | ❌                       | ❌        |
 
 Hidden profiles return **404** (not 403), so the API doesn't reveal that a profile exists.
-`FRIENDS` currently resolves to owner-only; it will consult the Graph service once that
-service is built.
+
+For `FRIENDS`, this service makes a live call to the **Graph service**: it forwards the
+viewer's bearer token to `GET {graph}/v1/relationship/{ownerId}` and shows the profile only
+if `friendStatus == FRIENDS`. If Graph is unreachable it **fails closed** (treats the viewer
+as not-a-friend), so an outage can't leak a private-ish profile. Configure the Graph
+endpoint with `app.graph.base-url` (env `GRAPH_BASE_URL`, default `http://localhost:8082`).
 
 ### Example
 
@@ -111,6 +115,7 @@ read repopulates from the database with fresh data.
 
 ```
 src/main/java/com/vertex/profile/
+├── client/      GraphClient (calls Graph for FRIENDS visibility)
 ├── config/      JwtProperties, SecurityConfig, CacheConfig
 ├── domain/      Profile, ProfileVisibility
 ├── repository/  ProfileRepository

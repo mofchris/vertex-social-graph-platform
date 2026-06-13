@@ -68,9 +68,9 @@ Routes: `/` (landing), `/login` (sign in), `/signup` (create account).
   refresh-token rotation with reuse detection; runs on embedded H2 or Postgres. See
   [its README](./services/identity/README.md).
 - ✅ **Profile service** (`services/profile`) — profile CRUD, **Redis read-through cache**
-  with serve-time privacy (public/friends/private); verifies Identity's JWTs. Runs on
-  embedded H2 + in-process cache, or Postgres + Redis. See
-  [its README](./services/profile/README.md).
+  with serve-time privacy (public/friends/private); verifies Identity's JWTs and calls the
+  Graph service (token propagation) for `FRIENDS` visibility. Runs on embedded H2 +
+  in-process cache, or Postgres + Redis. See [its README](./services/profile/README.md).
 - ✅ **Graph service** (`services/graph`) — the social graph: follows, friend requests
   (state machine, crossing-request auto-accept), blocks (block-wins), relationship/counts,
   cursor-paginated friends. See [its README](./services/graph/README.md).

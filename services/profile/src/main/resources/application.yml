@@ -33,12 +33,20 @@ management:
   endpoint:
     health:
       show-details: when-authorized
+  health:
+    # Dev uses the simple in-process cache; no Redis to health-check.
+    # Re-enabled implicitly under the postgres profile (which runs Redis).
+    redis:
+      enabled: false
 
 app:
   jwt:
     # MUST match the Identity service's secret so this service can verify its tokens.
     secret: ${APP_JWT_SECRET:dev-only-secret-change-me-please-min-32-bytes-long-0123456789}
     issuer: vertex-identity
+  graph:
+    # The Graph service, consulted for FRIENDS-visibility profiles.
+    base-url: ${GRAPH_BASE_URL:http://localhost:8082}
 
 ---
 # Postgres + Redis profile: used by docker-compose (SPRING_PROFILES_ACTIVE=postgres).

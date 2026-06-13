@@ -1,5 +1,6 @@
 package com.vertex.profile.web;
 
+import com.vertex.profile.client.GraphClient;
 import com.vertex.profile.config.JwtProperties;
 import com.vertex.profile.repository.ProfileRepository;
 import io.jsonwebtoken.Jwts;
@@ -10,7 +11,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.cache.CacheManager;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.when;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
@@ -45,8 +51,12 @@ class ProfileFlowIntegrationTest {
     @Autowired
     private CacheManager cacheManager;
 
+    @MockitoBean
+    private GraphClient graphClient;
+
     private final UUID alice = UUID.randomUUID();
     private final UUID bob = UUID.randomUUID();
+    private final UUID carol = UUID.randomUUID();
 
     @BeforeEach
     void reset() {
@@ -108,6 +118,31 @@ class ProfileFlowIntegrationTest {
 
         // Unknown profile -> 404.
         mvc.perform(get("/v1/profiles/" + UUID.randomUUID())).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void friendsVisibilityConsultsGraph() throws Exception {
+        // Alice's profile is FRIENDS-only.
+        mvc.perform(put("/v1/me/profile").header("Authorization", "Bearer " + token(alice))
+                        .contentType(APPLICATION_JSON).content(body("Alice", "FRIENDS")))
+                .andExpect(status().isOk());
+
+        // Bob is a friend (Graph says so) -> visible.
+        when(graphClient.areFriends(eq(alice), anyString())).thenReturn(true);
+        mvc.perform(get("/v1/profiles/" + alice).header("Authorization", "Bearer " + token(bob)))
+                .andExpect(status().isOk());
+
+        // Carol is not a friend -> hidden (404).
+        when(graphClient.areFriends(eq(alice), anyString())).thenReturn(false);
+        mvc.perform(get("/v1/profiles/" + alice).header("Authorization", "Bearer " + token(carol)))
+                .andExpect(status().isNotFound());
+
+        // Anonymous viewer -> hidden, and Graph is never consulted.
+        mvc.perform(get("/v1/profiles/" + alice)).andExpect(status().isNotFound());
+
+        // The owner always sees their own profile.
+        mvc.perform(get("/v1/profiles/" + alice).header("Authorization", "Bearer " + token(alice)))
+                .andExpect(status().isOk());
     }
 
     @Test
