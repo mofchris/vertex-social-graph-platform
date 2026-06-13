@@ -1,0 +1,62 @@
+server:
+  # 8081 so Profile can run alongside the Identity service (8080) locally.
+  port: 8081
+
+spring:
+  application:
+    name: profile
+  # Default (dev) profile: in-memory H2 + a simple in-process cache.
+  # Runs with only a JDK — no Docker, Postgres, or Redis required.
+  datasource:
+    url: jdbc:h2:mem:profile;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
+    username: sa
+    password: ""
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+  cache:
+    type: simple
+  h2:
+    console:
+      enabled: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+
+app:
+  jwt:
+    # MUST match the Identity service's secret so this service can verify its tokens.
+    secret: ${APP_JWT_SECRET:dev-only-secret-change-me-please-min-32-bytes-long-0123456789}
+    issuer: vertex-identity
+
+---
+# Postgres + Redis profile: used by docker-compose (SPRING_PROFILES_ACTIVE=postgres).
+spring:
+  config:
+    activate:
+      on-profile: postgres
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/profile}
+    username: ${DB_USERNAME:profile}
+    password: ${DB_PASSWORD:profile}
+    driver-class-name: org.postgresql.Driver
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+  cache:
+    type: redis
+    redis:
+      time-to-live: ${PROFILE_CACHE_TTL:PT5M}
+      cache-null-values: false

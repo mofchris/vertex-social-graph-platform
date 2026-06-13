@@ -65,4 +65,8 @@ Routes: `/` (landing), `/login` (sign in), `/signup` (create account).
 - ✅ **Identity service** (`services/identity`) — signup/login, JWT access tokens,
   refresh-token rotation with reuse detection; runs on embedded H2 or Postgres. See
   [its README](./services/identity/README.md).
-- 🚧 Other services (Profile, Graph, Feed, Recommend, Notify) — next
+- ✅ **Profile service** (`services/profile`) — profile CRUD, **Redis read-through cache**
+  with serve-time privacy (public/friends/private); verifies Identity's JWTs. Runs on
+  embedded H2 + in-process cache, or Postgres + Redis. See
+  [its README](./services/profile/README.md).
+- 🚧 Other services (Graph, Feed, Recommend, Notify) — next
