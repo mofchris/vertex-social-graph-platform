@@ -14,6 +14,7 @@ import com.vertex.graph.web.dto.CountsResponse;
 import com.vertex.graph.web.dto.FriendStatus;
 import com.vertex.graph.web.dto.FriendsPage;
 import com.vertex.graph.web.dto.RelationshipResponse;
+import com.vertex.graph.web.dto.UserPage;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
@@ -22,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
 
 @Service
 public class GraphService {
@@ -180,6 +182,34 @@ public class GraphService {
         List<UUID> items = page.stream().map(f -> f.other(actor)).toList();
         String nextCursor = hasMore ? page.get(page.size() - 1).getId().toString() : null;
         return new FriendsPage(items, nextCursor);
+    }
+
+    @Transactional(readOnly = true)
+    public UserPage listFollowers(UUID userId, UUID cursor, int limit) {
+        int pageSize = Math.clamp(limit, 1, MAX_PAGE_SIZE);
+        Limit fetch = Limit.of(pageSize + 1);
+        List<Follow> rows = (cursor == null)
+                ? follows.followersFirstPage(userId, fetch)
+                : follows.followersAfter(userId, cursor, fetch);
+        return pageOf(rows, pageSize, Follow::getFollowerId);
+    }
+
+    @Transactional(readOnly = true)
+    public UserPage listFollowing(UUID userId, UUID cursor, int limit) {
+        int pageSize = Math.clamp(limit, 1, MAX_PAGE_SIZE);
+        Limit fetch = Limit.of(pageSize + 1);
+        List<Follow> rows = (cursor == null)
+                ? follows.followingFirstPage(userId, fetch)
+                : follows.followingAfter(userId, cursor, fetch);
+        return pageOf(rows, pageSize, Follow::getFolloweeId);
+    }
+
+    private UserPage pageOf(List<Follow> rows, int pageSize, Function<Follow, UUID> extractor) {
+        boolean hasMore = rows.size() > pageSize;
+        List<Follow> page = hasMore ? rows.subList(0, pageSize) : rows;
+        List<UUID> items = page.stream().map(extractor).toList();
+        String nextCursor = hasMore ? page.get(page.size() - 1).getId().toString() : null;
+        return new UserPage(items, nextCursor);
     }
 
     // --- Guards --------------------------------------------------------------

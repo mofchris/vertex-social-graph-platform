@@ -73,5 +73,15 @@ Routes: `/` (landing), `/login` (sign in), `/signup` (create account).
   in-process cache, or Postgres + Redis. See [its README](./services/profile/README.md).
 - ✅ **Graph service** (`services/graph`) — the social graph: follows, friend requests
   (state machine, crossing-request auto-accept), blocks (block-wins), relationship/counts,
-  cursor-paginated friends. See [its README](./services/graph/README.md).
-- 🚧 Other services (Feed, Recommend, Notify) — next
+  cursor-paginated friends/followers/following. See [its README](./services/graph/README.md).
+- ✅ **Feed service** (`services/feed`) — posts + home timelines with **hybrid fan-out**
+  (on-write for normal authors, on-read for celebrities); calls Graph for the follow graph.
+  See [its README](./services/feed/README.md).
+- 🚧 Other services (Recommend, Notify) — next
+
+## Demo data
+
+[`scripts/seed-demo.sh`](./scripts/seed-demo.sh) populates the whole platform with ~80
+users — profiles, a follow graph with a few celebrities, friendships, and posts — by driving
+the live APIs. Start the four services (each `cd services/<name> && ./mvnw spring-boot:run`),
+then run `bash scripts/seed-demo.sh`. It's re-runnable (logs in if a user already exists).

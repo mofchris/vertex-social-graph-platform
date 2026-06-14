@@ -172,6 +172,23 @@ class GraphFlowIntegrationTest {
     }
 
     @Test
+    void listsFollowersAndFollowing() throws Exception {
+        UUID carol = UUID.randomUUID();
+        // alice and carol both follow bob
+        mvc.perform(post("/v1/follow/" + bob).header("Authorization", bearer(alice))).andExpect(status().isNoContent());
+        mvc.perform(post("/v1/follow/" + bob).header("Authorization", bearer(carol))).andExpect(status().isNoContent());
+        // alice follows bob and carol
+        mvc.perform(post("/v1/follow/" + carol).header("Authorization", bearer(alice))).andExpect(status().isNoContent());
+
+        mvc.perform(get("/v1/followers/" + bob).header("Authorization", bearer(alice)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(2));   // alice + carol
+        mvc.perform(get("/v1/following/" + alice).header("Authorization", bearer(alice)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(2));   // bob + carol
+    }
+
+    @Test
     void writesRequireAuthentication() throws Exception {
         mvc.perform(post("/v1/follow/" + bob)).andExpect(status().is4xxClientError());
     }

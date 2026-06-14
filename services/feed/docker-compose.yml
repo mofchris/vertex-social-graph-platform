@@ -1,0 +1,38 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: feed
+      POSTGRES_USER: feed
+      POSTGRES_PASSWORD: feed
+    ports:
+      - "5435:5432"   # 5435 on the host to avoid clashing with the other service DBs
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U feed"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  feed:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: postgres
+      DB_URL: jdbc:postgresql://postgres:5432/feed
+      DB_USERNAME: feed
+      DB_PASSWORD: feed
+      # Graph service (for follower/following lists during fan-out). Reaches a Graph
+      # instance running on the host's port 8082.
+      GRAPH_BASE_URL: http://host.docker.internal:8082
+      CELEBRITY_THRESHOLD: "20"
+      # MUST match the Identity service's APP_JWT_SECRET so tokens verify across services.
+      APP_JWT_SECRET: change-me-in-prod-use-a-long-random-secret-0123456789
+    ports:
+      - "8083:8083"
+
+volumes:
+  pgdata:

@@ -4,6 +4,7 @@ import com.vertex.graph.service.GraphService;
 import com.vertex.graph.web.dto.CountsResponse;
 import com.vertex.graph.web.dto.FriendsPage;
 import com.vertex.graph.web.dto.RelationshipResponse;
+import com.vertex.graph.web.dto.UserPage;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -96,5 +97,21 @@ public class GraphController {
     @GetMapping("/v1/counts/{userId}")
     public CountsResponse counts(@PathVariable UUID userId) {
         return graph.counts(userId);
+    }
+
+    @GetMapping("/v1/followers/{userId}")
+    public UserPage followers(
+            @PathVariable UUID userId,
+            @RequestParam(required = false) UUID cursor,
+            @RequestParam(defaultValue = "50") int limit) {
+        return graph.listFollowers(userId, cursor, limit);
+    }
+
+    @GetMapping("/v1/following/{userId}")
+    public UserPage following(
+            @PathVariable UUID userId,
+            @RequestParam(required = false) UUID cursor,
+            @RequestParam(defaultValue = "50") int limit) {
+        return graph.listFollowing(userId, cursor, limit);
     }
 }
