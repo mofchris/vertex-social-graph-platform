@@ -80,7 +80,9 @@ Routes: `/` (landing), `/login` (sign in), `/signup` (create account).
 - ✅ **Notify service** (`services/notify`) — notifications with **coalescing** (1,000 likes →
   one "X and N others") and **real-time** delivery over Server-Sent Events. See
   [its README](./services/notify/README.md).
-- 🚧 Other services (Recommend) — next
+- ✅ **Recommend service** (`services/recommend`) — "people you may know" via
+  friends-of-friends traversal with supernode caps and eligibility filtering; stateless,
+  computed live from Graph. See [its README](./services/recommend/README.md).
 
 ## Demo data
 

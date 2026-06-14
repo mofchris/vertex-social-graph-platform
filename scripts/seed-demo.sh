@@ -6,9 +6,9 @@
 # fan-out threshold), a random follow graph, some friendships, and posts. Posts are
 # created AFTER the follow graph exists so fan-out populates timelines.
 #
-# Prerequisites: identity (8080), profile (8081), graph (8082), feed (8083), notify (8084)
-# running with the SAME APP_JWT_SECRET (the dev default works). Run each service with
-# `./mvnw spring-boot:run` (embedded H2) or via docker-compose.
+# Prerequisites: identity (8080), profile (8081), graph (8082), feed (8083), notify (8084),
+# recommend (8085) running with the SAME APP_JWT_SECRET (the dev default works). Run each
+# service with `./mvnw spring-boot:run` (embedded H2) or via docker-compose.
 #
 # Usage:  bash scripts/seed-demo.sh
 set -euo pipefail
@@ -18,6 +18,7 @@ PR=${PROFILE_URL:-http://localhost:8081}
 GR=${GRAPH_URL:-http://localhost:8082}
 FE=${FEED_URL:-http://localhost:8083}
 NO=${NOTIFY_URL:-http://localhost:8084}
+RE=${RECOMMEND_URL:-http://localhost:8085}
 
 COUNT=${COUNT:-80}
 CELEBS=3                 # users 0,1,2 are celebrities
@@ -123,6 +124,7 @@ echo "==> Summary"
 echo "celebrity demo_user0 counts:        $(curl -s "$GR/v1/counts/${USERID[0]}" -H "Authorization: Bearer ${TOK[0]}")"
 echo "celebrity demo_user0 notifications: $(curl -s "$NO/v1/notifications" -H "Authorization: Bearer ${TOK[0]}" | head -c 240)"
 echo "regular  demo_user40 feed:          $(curl -s "$FE/v1/feed?limit=5" -H "Authorization: Bearer ${TOK[40]}" | head -c 300)"
+echo "regular  demo_user40 PYMK:          $(curl -s "$RE/v1/recommendations?limit=5" -H "Authorization: Bearer ${TOK[40]}" | head -c 240)"
 echo
 echo "Seed complete. Try:"
 echo "  curl \"$FE/v1/feed\" -H \"Authorization: Bearer <token>\""

@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [identity, profile, graph, feed, notify]
+        service: [identity, profile, graph, feed, notify, recommend]
     steps:
       - uses: actions/checkout@v4
 

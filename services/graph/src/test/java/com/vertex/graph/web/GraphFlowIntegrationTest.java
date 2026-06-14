@@ -169,6 +169,11 @@ class GraphFlowIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items.length()").value(1))
                 .andExpect(jsonPath("$.nextCursor").doesNotExist());
+
+        // Any user's friends are viewable by id (used by the Recommend service for FoF).
+        mvc.perform(get("/v1/friends/" + hub).header("Authorization", bearer(friends[0])))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(3));
     }
 
     @Test

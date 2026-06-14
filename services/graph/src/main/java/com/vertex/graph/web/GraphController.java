@@ -99,6 +99,14 @@ public class GraphController {
         return graph.counts(userId);
     }
 
+    @GetMapping("/v1/friends/{userId}")
+    public FriendsPage friendsOf(
+            @PathVariable UUID userId,
+            @RequestParam(required = false) UUID cursor,
+            @RequestParam(defaultValue = "50") int limit) {
+        return graph.listFriends(userId, cursor, limit);
+    }
+
     @GetMapping("/v1/followers/{userId}")
     public UserPage followers(
             @PathVariable UUID userId,

@@ -1,0 +1,30 @@
+server:
+  # 8085 so Recommend runs alongside the other services.
+  port: 8085
+
+spring:
+  application:
+    name: recommend
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+
+app:
+  jwt:
+    # MUST match the Identity service's secret so this service can verify its tokens.
+    secret: ${APP_JWT_SECRET:dev-only-secret-change-me-please-min-32-bytes-long-0123456789}
+    issuer: vertex-identity
+  graph:
+    # The Graph service, traversed for friends-of-friends recommendations.
+    base-url: ${GRAPH_BASE_URL:http://localhost:8082}
+  recommend:
+    # Supernode guards: cap how many of the user's friends we expand, and how many friends
+    # of each we sample. Bounds the work so a high-degree node doesn't blow up traversal.
+    max-seed-friends: ${MAX_SEED_FRIENDS:50}
+    max-sample-per-friend: ${MAX_SAMPLE_PER_FRIEND:100}

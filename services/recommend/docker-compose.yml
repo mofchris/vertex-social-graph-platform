@@ -1,0 +1,11 @@
+services:
+  recommend:
+    build: .
+    environment:
+      # Recommend is stateless — no database. It reads the friend graph from Graph,
+      # reachable here on the host's port 8082.
+      GRAPH_BASE_URL: http://host.docker.internal:8082
+      # MUST match the Identity service's APP_JWT_SECRET so tokens verify across services.
+      APP_JWT_SECRET: change-me-in-prod-use-a-long-random-secret-0123456789
+    ports:
+      - "8085:8085"
