@@ -6,9 +6,9 @@
 # fan-out threshold), a random follow graph, some friendships, and posts. Posts are
 # created AFTER the follow graph exists so fan-out populates timelines.
 #
-# Prerequisites: identity (8080), profile (8081), graph (8082), feed (8083) running with
-# the SAME APP_JWT_SECRET (the dev default works). Run each service with `./mvnw spring-boot:run`
-# (embedded H2) or via docker-compose.
+# Prerequisites: identity (8080), profile (8081), graph (8082), feed (8083), notify (8084)
+# running with the SAME APP_JWT_SECRET (the dev default works). Run each service with
+# `./mvnw spring-boot:run` (embedded H2) or via docker-compose.
 #
 # Usage:  bash scripts/seed-demo.sh
 set -euo pipefail
@@ -17,6 +17,7 @@ ID=${ID_URL:-http://localhost:8080}
 PR=${PROFILE_URL:-http://localhost:8081}
 GR=${GRAPH_URL:-http://localhost:8082}
 FE=${FEED_URL:-http://localhost:8083}
+NO=${NOTIFY_URL:-http://localhost:8084}
 
 COUNT=${COUNT:-80}
 CELEBS=3                 # users 0,1,2 are celebrities
@@ -105,10 +106,23 @@ for i in $(seq 0 $((COUNT - 1))); do
 done
 echo "    done"
 
+echo "==> Generating notifications ($NO)"
+# Each celebrity's followers emit a FOLLOW event -> one coalesced notification per celebrity.
+for c in $(seq 0 $((CELEBS - 1))); do
+  for i in $(seq $CELEBS $((CELEBS + CELEB_FOLLOWERS - 1))); do
+    [ "$i" -ge "$COUNT" ] && break
+    curl -s -o /dev/null -X POST "$NO/v1/events" -H "Authorization: Bearer ${TOK[$i]}" \
+      -H 'Content-Type: application/json' \
+      -d "{\"recipientId\":\"${USERID[$c]}\",\"type\":\"FOLLOW\"}"
+  done
+done
+echo "    done"
+
 echo
 echo "==> Summary"
-echo "celebrity demo_user0 counts: $(curl -s "$GR/v1/counts/${USERID[0]}" -H "Authorization: Bearer ${TOK[0]}")"
-echo "regular  demo_user40 feed:   $(curl -s "$FE/v1/feed?limit=5" -H "Authorization: Bearer ${TOK[40]}" | head -c 400)"
+echo "celebrity demo_user0 counts:        $(curl -s "$GR/v1/counts/${USERID[0]}" -H "Authorization: Bearer ${TOK[0]}")"
+echo "celebrity demo_user0 notifications: $(curl -s "$NO/v1/notifications" -H "Authorization: Bearer ${TOK[0]}" | head -c 240)"
+echo "regular  demo_user40 feed:          $(curl -s "$FE/v1/feed?limit=5" -H "Authorization: Bearer ${TOK[40]}" | head -c 300)"
 echo
 echo "Seed complete. Try:"
 echo "  curl \"$FE/v1/feed\" -H \"Authorization: Bearer <token>\""

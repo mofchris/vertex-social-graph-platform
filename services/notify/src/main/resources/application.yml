@@ -1,0 +1,51 @@
+server:
+  # 8084 so Notify runs alongside identity (8080), profile (8081), graph (8082), feed (8083).
+  port: 8084
+
+spring:
+  application:
+    name: notify
+  datasource:
+    url: jdbc:h2:mem:notify;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
+    username: sa
+    password: ""
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+  h2:
+    console:
+      enabled: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+
+app:
+  jwt:
+    # MUST match the Identity service's secret so this service can verify its tokens.
+    secret: ${APP_JWT_SECRET:dev-only-secret-change-me-please-min-32-bytes-long-0123456789}
+    issuer: vertex-identity
+  notify:
+    # Server-Sent Events stream timeout (ms). Clients reconnect when it elapses.
+    sse-timeout-ms: ${SSE_TIMEOUT_MS:1800000}
+
+---
+spring:
+  config:
+    activate:
+      on-profile: postgres
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/notify}
+    username: ${DB_USERNAME:notify}
+    password: ${DB_PASSWORD:notify}
+    driver-class-name: org.postgresql.Driver

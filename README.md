@@ -77,7 +77,10 @@ Routes: `/` (landing), `/login` (sign in), `/signup` (create account).
 - ✅ **Feed service** (`services/feed`) — posts + home timelines with **hybrid fan-out**
   (on-write for normal authors, on-read for celebrities); calls Graph for the follow graph.
   See [its README](./services/feed/README.md).
-- 🚧 Other services (Recommend, Notify) — next
+- ✅ **Notify service** (`services/notify`) — notifications with **coalescing** (1,000 likes →
+  one "X and N others") and **real-time** delivery over Server-Sent Events. See
+  [its README](./services/notify/README.md).
+- 🚧 Other services (Recommend) — next
 
 ## Demo data
 
