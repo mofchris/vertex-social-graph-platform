@@ -23,10 +23,11 @@ observability and reliability patterns that keep it all running. The
 
 ```
 .
-├── web/            Next.js + TypeScript + Tailwind frontend showcase (live)
-├── PROJECT.md      Full stack, architecture, and feature breakdown
-├── EDGE_CASES.md   Edge cases by service (interview-grade reference)
-└── services/       Backend microservices (in progress)
+├── web/                Next.js + TypeScript + Tailwind frontend showcase (live)
+├── PROJECT.md          Full stack, architecture, and feature breakdown
+├── EDGE_CASES.md       Edge cases by service (interview-grade reference)
+├── docker-compose.yml  One-command full stack (Postgres + Redis + Kafka + every service)
+└── services/           Backend microservices
 ```
 
 ## Tech stack
@@ -60,6 +61,21 @@ npm run dev
 
 Routes: `/` (landing), `/login` (sign in), `/signup` (create account).
 
+## Run the whole platform
+
+One command boots Postgres, Redis, a single-node Kafka (KRaft), and every service:
+
+```bash
+docker compose up --build
+# identity :8080 · profile :8081 · graph :8082 · feed :8083 · notify :8084 · recommend :8085
+bash scripts/seed-demo.sh   # populate ~80 users once everything is healthy
+```
+
+Graph and Notify run the `kafka` profile here, so a follow/friend event flows
+**Graph → (transactional outbox) → Kafka `social.events` → Notify (idempotent consumer)**.
+Each service can also run standalone on embedded H2 with just a JDK (`cd services/<name> &&
+./mvnw spring-boot:run`).
+
 ## Status
 
 - ✅ Frontend showcase — landing, architecture overview, auth pages
@@ -73,12 +89,14 @@ Routes: `/` (landing), `/login` (sign in), `/signup` (create account).
   in-process cache, or Postgres + Redis. See [its README](./services/profile/README.md).
 - ✅ **Graph service** (`services/graph`) — the social graph: follows, friend requests
   (state machine, crossing-request auto-accept), blocks (block-wins), relationship/counts,
-  cursor-paginated friends/followers/following. See [its README](./services/graph/README.md).
+  cursor-paginated friends/followers/following. Publishes relationship events via a
+  **transactional outbox** → Kafka. See [its README](./services/graph/README.md).
 - ✅ **Feed service** (`services/feed`) — posts + home timelines with **hybrid fan-out**
   (on-write for normal authors, on-read for celebrities); calls Graph for the follow graph.
   See [its README](./services/feed/README.md).
 - ✅ **Notify service** (`services/notify`) — notifications with **coalescing** (1,000 likes →
-  one "X and N others") and **real-time** delivery over Server-Sent Events. See
+  one "X and N others") and **real-time** delivery over Server-Sent Events. Consumes Graph's
+  Kafka events with an **idempotent consumer** (dedupe ledger) and a **dead-letter queue**. See
   [its README](./services/notify/README.md).
 - ✅ **Recommend service** (`services/recommend`) — "people you may know" via
   friends-of-friends traversal with supernode caps and eligibility filtering; stateless,

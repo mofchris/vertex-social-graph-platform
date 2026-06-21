@@ -2,9 +2,14 @@ package com.vertex.notify.service;
 
 import com.vertex.notify.domain.Notification;
 import com.vertex.notify.domain.NotificationType;
+import com.vertex.notify.domain.ProcessedEvent;
 import com.vertex.notify.repository.NotificationRepository;
+import com.vertex.notify.repository.ProcessedEventRepository;
 import com.vertex.notify.web.dto.NotificationResponse;
 import com.vertex.notify.web.dto.NotificationsPage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,13 +23,43 @@ import java.util.UUID;
 public class NotificationService {
 
     private static final int MAX_PAGE_SIZE = 100;
+    private static final Logger log = LoggerFactory.getLogger(NotificationService.class);
 
     private final NotificationRepository repository;
+    private final ProcessedEventRepository processedEvents;
     private final SseEmitters sse;
 
-    public NotificationService(NotificationRepository repository, SseEmitters sse) {
+    public NotificationService(NotificationRepository repository, ProcessedEventRepository processedEvents,
+                               SseEmitters sse) {
         this.repository = repository;
+        this.processedEvents = processedEvents;
         this.sse = sse;
+    }
+
+    /**
+     * Idempotently turn a Kafka social event into a notification. Records {@code eventId} in the
+     * dedupe ledger and ingests the notification in one transaction: a redelivered event (Kafka is
+     * at-least-once) finds the id already present and is skipped, so the same event never produces
+     * two notifications or double-bumps a coalesced count. Returns {@code true} if this call did the
+     * work, {@code false} if it was a duplicate.
+     */
+    @Transactional
+    public boolean ingestEvent(UUID eventId, UUID recipientId, NotificationType type, UUID targetId, UUID actorId) {
+        if (processedEvents.existsById(eventId)) {
+            log.debug("skipping already-processed event {}", eventId);
+            return false;
+        }
+        try {
+            processedEvents.save(new ProcessedEvent(eventId));
+            // Flush the ledger row now so a concurrent redelivery collides on the primary key here
+            // rather than silently producing a second notification.
+            repository.flush();
+        } catch (DataIntegrityViolationException duplicate) {
+            log.debug("lost the race to process event {}; another consumer handled it", eventId);
+            return false;
+        }
+        ingest(recipientId, type, targetId, actorId);
+        return true;
     }
 
     /**

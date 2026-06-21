@@ -11,8 +11,27 @@ Built with **Spring Boot 4.1 (Java 21)**, Spring Data JPA, Flyway, Spring Securi
 
 Like Profile, Graph is a **resource server**: it verifies Identity-issued JWTs (shared
 `APP_JWT_SECRET`, same issuer) and acts as the authenticated user (`sub`). Every node id is
-an Identity user id. It owns its own database. Profile's `FRIENDS` visibility will call this
-service once wired up.
+an Identity user id. It owns its own database. Profile's `FRIENDS` visibility, Feed's fan-out,
+and Recommend's traversal all call this service. When a relationship changes, Graph also emits
+a social event (see below) that Notify turns into a notification.
+
+## Event publishing (Kafka, transactional outbox)
+
+A follow / friend-request / friend-accept is worth telling someone about. Under the `kafka`
+profile, Graph publishes those as `social.events` to Kafka, where the Notify service consumes
+them. The wiring is the **transactional outbox** pattern, the textbook fix for the
+"partial-failure multi-service write" in [`EDGE_CASES.md`](../../EDGE_CASES.md):
+
+- The service publishes an in-process `SocialEvent`. A `@TransactionalEventListener(BEFORE_COMMIT)`
+  stages it as an `outbox_events` row **in the same transaction as the edge**, so the edge and
+  the pending message commit or roll back together — no lost-event window, no phantom event.
+- A `@Scheduled` **relay** drains unpublished rows to Kafka oldest-first and stamps each
+  published once the broker acks (`acks=all`). A broker blip just leaves the row for the next
+  tick; delivery is **at-least-once**, and the consumer dedupes on the event id.
+- Off by default: with no profile (just a JDK) the listener and relay don't exist, so there's
+  no broker dependency. Activate with `SPRING_PROFILES_ACTIVE=kafka` (or `postgres,kafka`).
+
+The whole stack — Graph → Kafka → Notify — boots from the repo-root `docker-compose.yml`.
 
 ## Run it
 

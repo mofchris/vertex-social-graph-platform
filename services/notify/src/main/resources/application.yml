@@ -49,3 +49,31 @@ spring:
     username: ${DB_USERNAME:notify}
     password: ${DB_PASSWORD:notify}
     driver-class-name: org.postgresql.Driver
+
+---
+# Kafka profile: turns on the event-driven path (Notify consumes social.events from Graph). Off by
+# default so the JDK-only / no-Docker run needs no broker. Activate with SPRING_PROFILES_ACTIVE=kafka.
+spring:
+  config:
+    activate:
+      on-profile: kafka
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: notify
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      # New consumer group reads the backlog from the start rather than skipping it.
+      auto-offset-reset: earliest
+      # At-least-once: the container commits offsets after the listener returns, not on poll.
+      enable-auto-commit: false
+    producer:
+      # Used by the dead-letter error handler to republish poison records to social.events.DLT.
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+app:
+  notify:
+    # Dedupe ledger retention. Must exceed the longest realistic redelivery window (Kafka's default
+    # log retention is 7 days), so a late redelivery still finds its event id and is skipped.
+    dedupe-retention-hours: ${DEDUPE_RETENTION_HOURS:168}
+    dedupe-purge-ms: ${DEDUPE_PURGE_MS:3600000}

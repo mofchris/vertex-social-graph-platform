@@ -98,7 +98,7 @@ Kafka (async events).
 
 ### Real-Time Interactions
 - [ ] Activity feed fan-out via Kafka.
-- [ ] Real-time notifications (new request, new follower).
+- [x] Real-time notifications (new request, new follower) — SSE + Kafka-driven, idempotent.
 - [ ] Online/presence status (Redis).
 
 ### Recommendations
@@ -110,7 +110,7 @@ Kafka (async events).
 - [ ] Read replicas for PostgreSQL.
 - [ ] Circuit breakers + retries with backoff between services.
 - [ ] Graceful degradation (serve cached data if a downstream is down).
-- [ ] Idempotent writes for safe retries.
+- [x] Idempotent writes for safe retries — transactional outbox (Graph) + dedupe ledger (Notify).
 - [ ] Health checks + liveness/readiness probes.
 
 ### Observability & Ops

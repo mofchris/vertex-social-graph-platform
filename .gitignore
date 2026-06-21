@@ -26,3 +26,9 @@ Thumbs.db
 # Local tooling / agent config
 .claude/
 .vercel/
+
+# Local QA notes (not for the repo)
+QA_FINDINGS.md
+
+# Internal design handoff (terminal-to-terminal scratch, not for the repo)
+design-research/HANDOFF.md

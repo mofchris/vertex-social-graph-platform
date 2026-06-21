@@ -9,8 +9,13 @@ Built with **Spring Boot 4.1 (Java 21)**, Spring Data JPA, Flyway, Spring Securi
 ## How it relates to the other services
 
 Notify verifies Identity-issued JWTs (shared `APP_JWT_SECRET`). It owns its own database.
-Other services (or, in production, a Kafka consumer) report events to `POST /v1/events`; the
-acting user is the caller. The demo seed drives this endpoint directly.
+It ingests events two ways:
+
+- **`POST /v1/events`** — a synchronous HTTP hook, the acting user being the caller. Always on;
+  the default JDK-only run and the demo seed use this.
+- **Kafka `social.events`** — under the `kafka` profile, Notify consumes the events the Graph
+  service publishes (its transactional outbox → Kafka). This is the asynchronous, decoupled path
+  a real deployment uses; see below.
 
 ## Coalescing — the core idea
 
@@ -24,6 +29,27 @@ client renders "**X and N others** liked your post". See `EDGE_CASES.md`: notifi
 - Coalescing window: while unread. Once read, the next event starts a fresh notification.
 - Done as find-or-create in a transaction. (Production would add a Postgres partial UNIQUE
   index `WHERE read = FALSE` for race safety; H2 has no partial indexes, so it's app-level here.)
+
+## Event ingestion over Kafka (the `kafka` profile)
+
+Kafka is **at-least-once**: a consumer crash between handling a record and committing its offset
+makes the record redeliver, and a rebalance can replay a partition. So the consumer is built to be
+**idempotent** and **poison-pill-proof** (see `EDGE_CASES.md`):
+
+- **Idempotent consumer** — every event carries a unique `eventId`. The consumer records it in a
+  `processed_events` ledger **in the same transaction** as the notification it produces; a
+  redelivered event finds its id already there and is skipped, so 1,000 redeliveries never become
+  1,000 notifications or double-bump a coalesced count.
+- **Dead-letter queue** — a record the consumer can't parse is left to throw; a `DefaultErrorHandler`
+  retries twice for a transient fault, then republishes it to `social.events.DLT` instead of
+  crash-looping the partition and starving every other recipient. A record whose *type* we don't
+  model yet is dropped quietly (forward-compatible), not dead-lettered.
+- **Bounded ledger** — a scheduled purge drops ledger rows past a retention window longer than any
+  realistic redelivery (default 7 days), so the dedupe table can't grow without bound.
+
+Off by default: the consumer, DLQ handler, and purge are all `@Profile("kafka")`. Activate with
+`SPRING_PROFILES_ACTIVE=kafka` (or `postgres,kafka`). The repo-root `docker-compose.yml` boots
+Graph → Kafka → Notify end-to-end.
 
 ## Real-time delivery
 

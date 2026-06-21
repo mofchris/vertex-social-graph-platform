@@ -4,6 +4,8 @@ import com.vertex.graph.domain.Block;
 import com.vertex.graph.domain.Follow;
 import com.vertex.graph.domain.Friendship;
 import com.vertex.graph.domain.FriendshipStatus;
+import com.vertex.graph.events.SocialEvent;
+import com.vertex.graph.events.SocialEventType;
 import com.vertex.graph.exception.BadRequestException;
 import com.vertex.graph.exception.ConflictException;
 import com.vertex.graph.exception.NotFoundException;
@@ -15,6 +17,7 @@ import com.vertex.graph.web.dto.FriendStatus;
 import com.vertex.graph.web.dto.FriendsPage;
 import com.vertex.graph.web.dto.RelationshipResponse;
 import com.vertex.graph.web.dto.UserPage;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
@@ -33,11 +36,25 @@ public class GraphService {
     private final FollowRepository follows;
     private final FriendshipRepository friendships;
     private final BlockRepository blocks;
+    private final ApplicationEventPublisher events;
 
-    public GraphService(FollowRepository follows, FriendshipRepository friendships, BlockRepository blocks) {
+    public GraphService(FollowRepository follows, FriendshipRepository friendships, BlockRepository blocks,
+                        ApplicationEventPublisher events) {
         this.follows = follows;
         this.friendships = friendships;
         this.blocks = blocks;
+        this.events = events;
+    }
+
+    /**
+     * Announce a relationship change. The event is published in-process inside the current
+     * transaction; under the {@code kafka} profile {@code OutboxEventWriter} stages it to the outbox
+     * before commit and {@code OutboxRelay} ships it to Kafka, otherwise it lands nowhere (and costs
+     * nothing). Only call this on a real state change, never on an idempotent no-op, so we don't
+     * notify twice for the same action.
+     */
+    private void announce(SocialEventType type, UUID actor, UUID recipient, UUID target) {
+        events.publishEvent(SocialEvent.of(type, actor, recipient, target));
     }
 
     // --- Follows -------------------------------------------------------------
@@ -51,8 +68,10 @@ public class GraphService {
         }
         try {
             follows.save(new Follow(actor, target));
+            announce(SocialEventType.FOLLOW, actor, target, null); // "actor followed you"
         } catch (DataIntegrityViolationException e) {
-            // Concurrent follow won the unique constraint — that's fine, the edge exists.
+            // Concurrent follow won the unique constraint — the edge exists, and the winner already
+            // announced it, so we stay quiet.
         }
     }
 
@@ -80,12 +99,15 @@ public class GraphService {
                 return; // duplicate outgoing request — no-op
             }
             // The target already requested us first: crossing requests collapse into a friendship.
+            // The original requester (the target) is the one who learns their request was accepted.
             f.accept();
+            announce(SocialEventType.FRIEND_ACCEPT, actor, f.getRequesterId(), null);
             return;
         }
 
         try {
             friendships.save(new Friendship(actor, target));
+            announce(SocialEventType.FRIEND_REQUEST, actor, target, null); // "actor wants to be friends"
         } catch (DataIntegrityViolationException e) {
             // A concurrent request created the row first; treat as a no-op.
         }
@@ -103,8 +125,9 @@ public class GraphService {
         if (f.getRequesterId().equals(actor)) {
             throw new ConflictException("cannot accept your own friend request");
         }
-        // actor is the addressee of a PENDING request -> accept it.
+        // actor is the addressee of a PENDING request -> accept it. The requester gets told.
         f.accept();
+        announce(SocialEventType.FRIEND_ACCEPT, actor, requester, null);
     }
 
     /** Cancel an outgoing request, reject an incoming one, or unfriend — all just drop the row. */
