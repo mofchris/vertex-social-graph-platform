@@ -14,8 +14,19 @@ management:
   endpoint:
     health:
       show-details: when-authorized
+  health:
+    # Default run uses the in-process limiter; no Redis to health-check.
+    # Re-enabled under the `redis` profile (which runs Redis).
+    redis:
+      enabled: false
 
 app:
+  ratelimit:
+    # Token bucket: burst up to `capacity`, then paced to `refill-per-second`. Applied per-IP and
+    # (when authenticated) per-user. Generous defaults; tune per deployment.
+    enabled: ${RATELIMIT_ENABLED:true}
+    capacity: ${RATELIMIT_CAPACITY:100}
+    refill-per-second: ${RATELIMIT_REFILL_PER_SECOND:50}
   jwt:
     # MUST match the Identity service's secret so the gateway can verify its tokens.
     secret: ${APP_JWT_SECRET:dev-only-secret-change-me-please-min-32-bytes-long-0123456789}
@@ -30,3 +41,19 @@ app:
       feed: ${FEED_BASE_URL:http://localhost:8083}
       notify: ${NOTIFY_BASE_URL:http://localhost:8084}
       recommend: ${RECOMMEND_BASE_URL:http://localhost:8085}
+
+---
+# Redis profile: distributed rate limiting shared across gateway instances (docker-compose uses it).
+# Activate with SPRING_PROFILES_ACTIVE=redis. Off by default so the JDK-only run needs no Redis.
+spring:
+  config:
+    activate:
+      on-profile: redis
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+management:
+  health:
+    redis:
+      enabled: true

@@ -40,6 +40,26 @@ Public (no token required): the auth endpoints `/api/identity/v1/auth/**`
 (signup / login / refresh / logout — you can't have a token before you log in) and the health /
 metrics probes. Everything else requires a valid token.
 
+## Rate limiting
+
+A **token bucket** (burst up to `capacity`, then paced to `refill-per-second`) runs at the very
+front of the chain — *before* authentication — so it also shields the public login/signup endpoints
+from brute force. Two buckets are checked (EDGE_CASES.md: combine per-account and per-IP):
+
+- **per-IP** always — bounds anonymous traffic; and
+- **per-user** when the request carries a valid token — so one heavy account can't drain a shared
+  NAT/CGNAT's IP budget for everyone behind it, and is still bounded on its own.
+
+Either bucket being empty returns `429 Too Many Requests` with a `Retry-After`. The decision is an
+**atomic Redis Lua script** (`scripts/token_bucket.lua`), so the read-modify-write can't race across
+gateway instances and there's no fixed-window boundary burst. If **Redis is unreachable** the
+limiter degrades to a per-instance in-memory bucket rather than failing requests — a limiter-store
+outage stays an outage of *sharing*, not of the gateway (EDGE_CASES.md: "limiter store down").
+
+Off-Redis by default (in-process limiter, no dependency); the distributed path activates under the
+`redis` profile (`SPRING_PROFILES_ACTIVE=redis`). Tunable via `app.ratelimit.{enabled,capacity,
+refill-per-second}`.
+
 ## Run it
 
 ```bash
@@ -53,9 +73,12 @@ Observability: `GET /actuator/health`, `GET /actuator/prometheus`.
 
 ```
 src/main/java/com/vertex/gateway/
-├── config/    GatewayProperties (routes), ProxyConfig (HTTP client), JwtProperties, SecurityConfig
-├── security/  JwtService (verify-only), JwtAuthenticationFilter
-├── web/       ProxyController (reverse proxy)
+├── config/     GatewayProperties, ProxyConfig, JwtProperties, SecurityConfig,
+│               RateLimitProperties, RateLimitConfig
+├── ratelimit/  RateLimiter, LocalRateLimiter, RedisRateLimiter (atomic Lua token bucket)
+├── security/   JwtService (verify-only), JwtAuthenticationFilter
+├── web/        ProxyController (reverse proxy), RateLimitFilter
 src/main/resources/
-└── application.yml
+├── application.yml
+└── scripts/token_bucket.lua
 ```
