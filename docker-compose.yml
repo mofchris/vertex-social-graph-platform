@@ -161,5 +161,39 @@ services:
     ports:
       - "8085:8085"
 
+  # The single front door: routes /api/<service>/** to the services, verifies the JWT at the edge,
+  # and rate-limits (distributed via Redis under the `redis` profile). The service ports above stay
+  # exposed for the demo seed and local debugging; real clients would go through the gateway.
+  gateway:
+    build: ./services/gateway
+    depends_on:
+      redis:
+        condition: service_healthy
+      identity:
+        condition: service_started
+      profile:
+        condition: service_started
+      graph:
+        condition: service_started
+      feed:
+        condition: service_started
+      notify:
+        condition: service_started
+      recommend:
+        condition: service_started
+    environment:
+      SPRING_PROFILES_ACTIVE: redis
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      APP_JWT_SECRET: *jwt
+      IDENTITY_BASE_URL: http://identity:8080
+      PROFILE_BASE_URL: http://profile:8081
+      GRAPH_BASE_URL: http://graph:8082
+      FEED_BASE_URL: http://feed:8083
+      NOTIFY_BASE_URL: http://notify:8084
+      RECOMMEND_BASE_URL: http://recommend:8085
+    ports:
+      - "8088:8088"
+
 volumes:
   pgdata:

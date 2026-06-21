@@ -67,9 +67,14 @@ One command boots Postgres, Redis, a single-node Kafka (KRaft), and every servic
 
 ```bash
 docker compose up --build
-# identity :8080 · profile :8081 · graph :8082 · feed :8083 · notify :8084 · recommend :8085
+# gateway :8088 (front door) — identity :8080 · profile :8081 · graph :8082 ·
+#   feed :8083 · notify :8084 · recommend :8085
 bash scripts/seed-demo.sh   # populate ~80 users once everything is healthy
 ```
+
+Clients go through the **gateway** on `:8088` (e.g. `POST /api/identity/v1/auth/login`,
+`GET /api/graph/v1/relationship/{id}`); the individual service ports stay exposed for the demo
+seed and local debugging.
 
 Graph and Notify run the `kafka` profile here, so a follow/friend event flows
 **Graph → (transactional outbox) → Kafka `social.events` → Notify (idempotent consumer)**.
@@ -101,6 +106,9 @@ Each service can also run standalone on embedded H2 with just a JDK (`cd service
 - ✅ **Recommend service** (`services/recommend`) — "people you may know" via
   friends-of-friends traversal with supernode caps and eligibility filtering; stateless,
   computed live from Graph. See [its README](./services/recommend/README.md).
+- ✅ **Gateway service** (`services/gateway`) — the single front door: reverse-proxy **routing**
+  to every service, **edge JWT verification**, and a **token-bucket rate limiter** (atomic Redis
+  Lua, per-IP + per-user, with a local fallback). See [its README](./services/gateway/README.md).
 
 ## Demo data
 

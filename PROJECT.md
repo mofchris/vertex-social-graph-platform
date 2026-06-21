@@ -81,7 +81,7 @@ Kafka (async events).
 - [ ] Password hashing (Argon2/bcrypt).
 - [ ] OAuth2 / social login (optional).
 - [ ] Session management and token revocation via Redis.
-- [ ] Rate limiting on auth endpoints (brute-force protection).
+- [x] Rate limiting on auth endpoints (brute-force protection) — gateway token bucket, per-IP + per-user.
 
 ### Profiles
 - [ ] Create / read / update user profile.
