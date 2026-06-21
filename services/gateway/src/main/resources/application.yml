@@ -1,0 +1,28 @@
+server:
+  # 8088: the single front door, after the services on 8080-8085.
+  port: ${SERVER_PORT:8088}
+
+spring:
+  application:
+    name: gateway
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+
+app:
+  gateway:
+    # Public service name -> downstream base URL. /api/<name>/<rest> forwards to <base-url>/<rest>.
+    # Defaults are localhost for `./mvnw spring-boot:run`; docker-compose overrides with service DNS.
+    routes:
+      identity: ${IDENTITY_BASE_URL:http://localhost:8080}
+      profile: ${PROFILE_BASE_URL:http://localhost:8081}
+      graph: ${GRAPH_BASE_URL:http://localhost:8082}
+      feed: ${FEED_BASE_URL:http://localhost:8083}
+      notify: ${NOTIFY_BASE_URL:http://localhost:8084}
+      recommend: ${RECOMMEND_BASE_URL:http://localhost:8085}
