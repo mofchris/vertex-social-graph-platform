@@ -29,6 +29,17 @@ Example: `GET /api/graph/v1/relationship/{id}` → `http://graph:8082/v1/relatio
 An unknown service is `404`; an unreachable downstream is `502` (the gateway is healthy, the
 upstream isn't) with a bounded connect/read timeout so a dead service can't pin a gateway thread.
 
+## Edge authentication
+
+The gateway verifies the Identity-issued JWT (shared HS256 secret, issuer check) **at the edge**:
+an invalid or missing token is rejected with `401` before any downstream call is made. The
+original `Authorization` header is then forwarded, and each service re-verifies it independently
+(defense in depth — the gateway is an optimization, not the only line of defense).
+
+Public (no token required): the auth endpoints `/api/identity/v1/auth/**`
+(signup / login / refresh / logout — you can't have a token before you log in) and the health /
+metrics probes. Everything else requires a valid token.
+
 ## Run it
 
 ```bash
@@ -42,8 +53,9 @@ Observability: `GET /actuator/health`, `GET /actuator/prometheus`.
 
 ```
 src/main/java/com/vertex/gateway/
-├── config/   GatewayProperties (route table), ProxyConfig (downstream HTTP client)
-├── web/      ProxyController (reverse proxy)
+├── config/    GatewayProperties (routes), ProxyConfig (HTTP client), JwtProperties, SecurityConfig
+├── security/  JwtService (verify-only), JwtAuthenticationFilter
+├── web/       ProxyController (reverse proxy)
 src/main/resources/
 └── application.yml
 ```

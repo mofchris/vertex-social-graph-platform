@@ -16,6 +16,10 @@ management:
       show-details: when-authorized
 
 app:
+  jwt:
+    # MUST match the Identity service's secret so the gateway can verify its tokens.
+    secret: ${APP_JWT_SECRET:dev-only-secret-change-me-please-min-32-bytes-long-0123456789}
+    issuer: vertex-identity
   gateway:
     # Public service name -> downstream base URL. /api/<name>/<rest> forwards to <base-url>/<rest>.
     # Defaults are localhost for `./mvnw spring-boot:run`; docker-compose overrides with service DNS.
