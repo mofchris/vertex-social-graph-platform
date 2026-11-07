@@ -35,7 +35,9 @@ import java.util.UUID;
  *   <li><b>general, per user</b> — when the request carries a valid token, so one heavy account
  *       can't drain a shared NAT/CGNAT's IP budget for everyone behind it;</li>
  *   <li><b>writes, per user</b> — for state-changing methods, so one account can't flood the
- *       graph, the feed or the event pipeline.</li>
+ *       graph, the feed or the event pipeline;</li>
+ *   <li><b>lab, per user</b> — for replaying events and sending poison records, which put
+ *       records on Kafka by design.</li>
  * </ol>
  *
  * Any empty bucket yields {@code 429} with {@code Retry-After}. Allowed responses carry
@@ -51,6 +53,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
     static final String REMAINING_HEADER = "X-RateLimit-Remaining";
     private static final String BEARER_PREFIX = "Bearer ";
     private static final String AUTH_PREFIX = "/api/identity/v1/auth/";
+    /** Replay and poison: each write here puts a record on Kafka on purpose. */
+    private static final String LAB_PREFIX = "/api/graph/v1/events/";
     private static final Set<String> WRITE_METHODS = Set.of("POST", "PUT", "PATCH", "DELETE");
 
     private final RateLimiter limiter;
@@ -72,6 +76,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
             @NonNull HttpServletResponse response,
             @NonNull FilterChain filterChain) throws ServletException, IOException {
 
+        // First filter in the chain: stamp arrival so the proxy can report time spent in the gateway.
+        request.setAttribute(ProxyController.ARRIVED_AT, System.nanoTime());
         if (!props.enabled() || isExempt(request)) {
             filterChain.doFilter(request, response);
             return;
@@ -106,6 +112,17 @@ public class RateLimitFilter extends OncePerRequestFilter {
             remaining = Math.min(remaining, byUser.remaining());
 
             if (WRITE_METHODS.contains(request.getMethod())) {
+                // The narrower lab bucket goes first, so a rejected lab call doesn't also spend
+                // the user's general write budget.
+                if (request.getRequestURI().startsWith(LAB_PREFIX)) {
+                    Decision lab = take("rl:lab:user:" + userId.get(), props.lab());
+                    if (!lab.allowed()) {
+                        reject(response, lab);
+                        return;
+                    }
+                    remaining = Math.min(remaining, lab.remaining());
+                }
+
                 Decision writes = take("rl:write:user:" + userId.get(), props.writes());
                 if (!writes.allowed()) {
                     reject(response, writes);

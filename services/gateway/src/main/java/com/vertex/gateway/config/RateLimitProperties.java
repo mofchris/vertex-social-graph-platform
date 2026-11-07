@@ -24,8 +24,18 @@ public record RateLimitProperties(
         @DefaultValue("10") int authCapacity,
         @DefaultValue("0.2") double authRefillPerSecond,
         @DefaultValue("30") int writeCapacity,
-        @DefaultValue("0.5") double writeRefillPerSecond
+        @DefaultValue("0.5") double writeRefillPerSecond,
+        @DefaultValue("6") int labCapacity,
+        @DefaultValue("0.05") double labRefillPerSecond
 ) {
+
+    /**
+     * The pipeline lab (replaying an event, sending a poison record), per user. Each call adds an
+     * outbox row and a Kafka record, so it gets its own small budget: 6 at once, then 3 a minute.
+     */
+    public Limit lab() {
+        return new Limit(labCapacity, labRefillPerSecond);
+    }
 
     public Limit general() {
         return new Limit(capacity, refillPerSecond);

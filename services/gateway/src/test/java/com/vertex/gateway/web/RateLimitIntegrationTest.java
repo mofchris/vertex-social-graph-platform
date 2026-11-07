@@ -54,13 +54,16 @@ class RateLimitIntegrationTest {
         String base = "http://localhost:" + stub.getAddress().getPort();
         registry.add("app.gateway.routes.echo", () -> base);
         registry.add("app.gateway.routes.identity", () -> base);
+        registry.add("app.gateway.routes.graph", () -> base);
         registry.add("app.gateway.client-ip-header", () -> "X-Edge-Client-IP");
         registry.add("app.ratelimit.capacity", () -> "3");
         registry.add("app.ratelimit.refill-per-second", () -> "0.01");
         registry.add("app.ratelimit.auth-capacity", () -> "2");
         registry.add("app.ratelimit.auth-refill-per-second", () -> "0.01");
-        registry.add("app.ratelimit.write-capacity", () -> "1");
+        registry.add("app.ratelimit.write-capacity", () -> "2");
         registry.add("app.ratelimit.write-refill-per-second", () -> "0.01");
+        registry.add("app.ratelimit.lab-capacity", () -> "1");
+        registry.add("app.ratelimit.lab-refill-per-second", () -> "0.01");
     }
 
     @AfterAll
@@ -116,11 +119,23 @@ class RateLimitIntegrationTest {
         String token = bearer(UUID.randomUUID());
         mvc.perform(post("/api/echo/v1/things").with(peer("10.30.0.1")).header("Authorization", token).content("a"))
                 .andExpect(status().isOk());
-        // Same user from a different IP: the per-user write bucket still applies.
-        mvc.perform(post("/api/echo/v1/things").with(peer("10.30.0.2")).header("Authorization", token).content("b"))
+        mvc.perform(post("/api/echo/v1/things").with(peer("10.30.0.3")).header("Authorization", token).content("b"))
+                .andExpect(status().isOk());
+        // Same user from yet another IP: the per-user write bucket (2) still applies.
+        mvc.perform(post("/api/echo/v1/things").with(peer("10.30.0.2")).header("Authorization", token).content("c"))
                 .andExpect(status().isTooManyRequests());
-        // Reads by that user are unaffected.
-        mvc.perform(get("/api/echo/v1/ping").with(peer("10.30.0.2")).header("Authorization", token))
+    }
+
+    @Test
+    void pipelineLabCallsHaveTheirOwnBudget() throws Exception {
+        String token = bearer(UUID.randomUUID());
+        mvc.perform(post("/api/graph/v1/events/poison").with(peer("10.50.0.1")).header("Authorization", token))
+                .andExpect(status().isOk());
+        // The lab bucket (1) is empty, though the user still has write budget left...
+        mvc.perform(post("/api/graph/v1/events/poison").with(peer("10.50.0.2")).header("Authorization", token))
+                .andExpect(status().isTooManyRequests());
+        // ...which an ordinary write proves.
+        mvc.perform(post("/api/graph/v1/follow/x").with(peer("10.50.0.3")).header("Authorization", token))
                 .andExpect(status().isOk());
     }
 

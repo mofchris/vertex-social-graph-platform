@@ -82,6 +82,8 @@ class ProxyRoutingIntegrationTest {
         mvc.perform(get("/api/echo/v1/ping?x=1").header("Authorization", bearer(UUID.randomUUID())))
                 .andExpect(status().isOk())
                 .andExpect(header().string("X-Downstream", "stub"))    // downstream header passed back
+                .andExpect(header().string("Server-Timing", org.hamcrest.Matchers.matchesPattern(
+                        "gateway;dur=\\d+\\.\\d, upstream;desc=\"echo\";dur=\\d+\\.\\d")))
                 .andExpect(content().string(containsString("GET /v1/ping?x=1")))
                 .andExpect(content().string(containsString("auth=yes"))); // token reached downstream
     }

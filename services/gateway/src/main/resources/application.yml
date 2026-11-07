@@ -38,6 +38,9 @@ app:
     # POST / PUT / PATCH / DELETE, per user: 30 at once, then one every 2 seconds.
     write-capacity: ${RATELIMIT_WRITE_CAPACITY:30}
     write-refill-per-second: ${RATELIMIT_WRITE_REFILL_PER_SECOND:0.5}
+    # Replaying events / sending poison records, per user: 6 at once, then 3 a minute.
+    lab-capacity: ${RATELIMIT_LAB_CAPACITY:6}
+    lab-refill-per-second: ${RATELIMIT_LAB_REFILL_PER_SECOND:0.05}
   jwt:
     # MUST match the Identity service's secret so the gateway can verify its tokens.
     secret: ${APP_JWT_SECRET:dev-only-secret-change-me-please-min-32-bytes-long-0123456789}

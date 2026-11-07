@@ -51,6 +51,9 @@ public class ProxyController {
 
     private static final Logger log = LoggerFactory.getLogger(ProxyController.class);
 
+    /** Request attribute holding {@link System#nanoTime()} at the moment the gateway first saw it. */
+    static final String ARRIVED_AT = "vertex.arrivedAt";
+
     /** Headers that describe a single connection and must not be forwarded across the proxy. */
     private static final Set<String> HOP_BY_HOP = Set.of(
             "host", "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
@@ -100,10 +103,12 @@ public class ProxyController {
             spec = spec.body(body);
         }
 
+        long sentAt = System.nanoTime();
         try {
             spec.exchange((downstreamRequest, downstreamResponse) -> {
                 response.setStatus(downstreamResponse.getStatusCode().value());
                 copyResponseHeaders(downstreamResponse.getHeaders(), response);
+                response.addHeader("Server-Timing", serverTiming(request, service, sentAt));
                 boolean eventStream = isEventStream(downstreamResponse.getHeaders());
                 if (eventStream) {
                     response.flushBuffer(); // send status + headers now; the body may take minutes
@@ -134,6 +139,19 @@ public class ProxyController {
             log.warn("downstream {} unreachable: {}", target, unreachable.getMessage());
             writeJson(response, HttpStatus.BAD_GATEWAY, "{\"error\":\"upstream unavailable\",\"service\":\"" + service + "\"}");
         }
+    }
+
+    /**
+     * W3C Server-Timing: how long the request has spent in the gateway so far, and how long the
+     * downstream service took to start answering. Measured when the downstream headers arrive, so
+     * it covers the work, not the time spent streaming a body back.
+     */
+    private static String serverTiming(HttpServletRequest request, String service, long sentAt) {
+        long now = System.nanoTime();
+        Object arrived = request.getAttribute(ARRIVED_AT);
+        long start = arrived instanceof Long t ? t : sentAt;
+        return String.format(Locale.ROOT, "gateway;dur=%.1f, upstream;desc=\"%s\";dur=%.1f",
+                (now - start) / 1e6, service, (now - sentAt) / 1e6);
     }
 
     private boolean isBlocked(String path) {
