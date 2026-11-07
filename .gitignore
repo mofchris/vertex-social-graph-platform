@@ -23,15 +23,9 @@ yarn-error.log*
 Thumbs.db
 *.swp
 
-# Local tooling / agent config
+# Local tooling
 .claude/
 .vercel/
-
-# Local QA notes (not for the repo)
-QA_FINDINGS.md
-
-# Internal design handoff (terminal-to-terminal scratch, not for the repo)
-design-research/HANDOFF.md
 
 # Wrangler local state
 .wrangler/

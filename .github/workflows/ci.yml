@@ -53,6 +53,14 @@ jobs:
         # on the Linux runner. npm install resolves the correct per-platform deps.
         run: npm install --no-audit --no-fund
 
-      - name: Build (type-check + lint + compile)
+      - name: Build (type-check + compile + static export)
         working-directory: web
         run: npm run build
+
+      - name: Lint
+        working-directory: web
+        run: npm run lint
+
+      - name: Type-check the Cloudflare Worker
+        working-directory: web
+        run: npm run typecheck:worker
