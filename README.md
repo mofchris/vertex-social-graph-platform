@@ -84,18 +84,20 @@ Tests: `cd services/<name> && ./mvnw test` (Testcontainers needs Docker), and
 
 | Piece | Where | Cost |
 |---|---|---|
-| Whole backend (7 services, Postgres, Redis, Kafka) | One Oracle Cloud Always Free Ampere A1 VM, 2 OCPU / 12 GB, Docker Compose | Free |
-| Network path to it | Cloudflare Tunnel: an outbound-only connector, no open ports, no public IP in use | Free |
+| Whole backend (7 services, Postgres, Redis, Kafka) | The owner's Windows PC: Docker Compose under WSL 2, started with Windows by systemd | Free |
+| Network path to it | Cloudflare Tunnel: an outbound-only connector, no open ports, no home IP exposed | Free |
 | Site and `/api` proxy | Cloudflare Worker with static assets, reaching the tunnel through Workers VPC | Free plan |
+| When the PC is off | The demo offers a run recorded against the real services, clearly labelled as a recording | Free |
 
-Measured on the running stack: about 3 GB of memory in use, CPU near idle between requests. Limits
-that apply: the Workers free plan allows 100,000 requests a day; the VM is one machine, so a
-restart takes the backend down for about two minutes (the site stays up and says so).
+The site is always up; the live demo is live while that PC is on. Measured on the running stack:
+about 3 GB of memory in use, CPU near idle between requests. The Workers free plan allows 100,000
+requests a day.
 
 The production setup lives in [`deploy/`](./deploy): the compose overlay (nothing published,
 secrets from `deploy/.env`, the tunnel connector), systemd units for start-on-boot and the nightly
-reset, and the VM bootstrap script. [`deploy/README.md`](./deploy/README.md) covers deploying and
-redeploying.
+reset, and a bootstrap script that sets up either a Windows PC under WSL 2 or a Linux VM (an
+Oracle Cloud Always Free ARM VM fits it). [`deploy/README.md`](./deploy/README.md) covers both,
+plus redeploying and re-recording the offline run.
 
 ## Repository layout
 

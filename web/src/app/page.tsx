@@ -14,7 +14,7 @@ export default function Home() {
         </h1>
         <div className="hero__copy">
           <p className="lede">
-            Seven Java services on Postgres, Redis and Kafka, running live on one free server. Follow someone, and
+            Seven Java services on Postgres, Redis and Kafka, running live on one machine. Follow someone, and
             the demo shows the event cross the gateway, an outbox, Kafka and an idempotent consumer.
           </p>
           <div className="hero__actions">
@@ -161,7 +161,7 @@ export default function Home() {
         </div>
         <div className="grid run" style={{ marginTop: "clamp(3rem, 2rem + 4vw, 6rem)" }}>
           <div className="run__text">
-            <h3 className="h2 display">How it stays online for free</h3>
+            <h3 className="h2 display">How it runs for free</h3>
           </div>
           <ul className="run__code hosting" role="list">
             {hosting.map((h) => (

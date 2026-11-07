@@ -27,7 +27,7 @@ measured scale it hasn't reached.
 | Observability | Spring Boot Actuator health and Prometheus metrics endpoints on every service; W3C Server-Timing from the gateway |
 | Tests | JUnit 5, MockMvc, Testcontainers (Postgres, Redis, Kafka) |
 | Web | Next.js 16 static export, TypeScript, GSAP; served by a Cloudflare Worker |
-| Runtime | Docker Compose; production on an Oracle Cloud Always Free ARM VM behind a Cloudflare Tunnel |
+| Runtime | Docker Compose; production on one PC under WSL 2 behind a Cloudflare Tunnel, with a recorded real run as the offline fallback |
 | CI | GitHub Actions: every service's tests, the web build and lint |
 
 ## Services
@@ -57,7 +57,7 @@ measured scale it hasn't reached.
 
 ## Not built (honest roadmap)
 
-- Kubernetes manifests, autoscaling and Terraform: the demo runs on Docker Compose on one VM.
+- Kubernetes manifests, autoscaling and Terraform: the demo runs on Docker Compose on one machine.
 - Sharding and read replicas: one Postgres instance with a database per service.
 - Grafana dashboards, distributed tracing and alerting: metrics are exposed, not collected.
 - OAuth / social login, password reset, presence.

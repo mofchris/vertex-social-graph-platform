@@ -3,7 +3,7 @@
 ## Brief
 
 - **Subject:** Vertex, a distributed social platform: seven Spring Boot services (identity, profile,
-  graph, feed, notify, recommend, gateway), Postgres, Redis and Kafka, running live on one free VM.
+  graph, feed, notify, recommend, gateway), Postgres, Redis and Kafka, running live on one machine.
 - **Audience:** recruiters and engineers deciding in a minute whether the builder understands
   distributed systems; curious strangers.
 - **Job:** make the architecture legible in 30 seconds, then let the visitor operate the real

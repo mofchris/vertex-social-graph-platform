@@ -44,7 +44,8 @@ export const facts = [
 ];
 
 export const hosting = [
-  { name: "Oracle Cloud Always Free", what: "One Ampere ARM VM, 2 OCPU and 12 GB, runs the whole Docker Compose stack." },
-  { name: "Cloudflare Tunnel", what: "An outbound-only connector on the VM. No public IP is exposed to visitors." },
+  { name: "One home PC", what: "The whole Docker Compose stack runs under WSL 2 and starts with Windows. It is live while that PC is on." },
+  { name: "Cloudflare Tunnel", what: "An outbound-only connector beside the stack. No port is opened and no home address is exposed." },
   { name: "Cloudflare Workers", what: "Serves this site and forwards /api to the gateway over Workers VPC." },
+  { name: "Recorded run", what: "When the PC is off, the demo offers a run recorded against the real services, labelled as one." },
 ];

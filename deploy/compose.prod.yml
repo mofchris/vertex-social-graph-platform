@@ -4,7 +4,7 @@
 #
 # (deploy/vertex.sh wraps that.) Differences from local:
 #   - nothing is published on the host: the only way in is the Cloudflare Tunnel below, which dials
-#     out to Cloudflare, so the VM needs no open inbound ports;
+#     out to Cloudflare, so the host needs no open inbound ports;
 #   - secrets (JWT key, database password, tunnel token) come from deploy/.env, which is not in git;
 #   - the gateway trusts X-Vertex-Client-IP, which the edge Worker sets from Cloudflare's
 #     CF-Connecting-IP, so rate limits are per visitor rather than per tunnel.

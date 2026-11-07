@@ -1,4 +1,4 @@
-// The Vertex edge. Serves the static site (out/) and forwards /api/* to the gateway on the VM.
+// The Vertex edge. Serves the static site (out/) and forwards /api/* to the gateway through the tunnel.
 //
 // The gateway has no public address: the Worker reaches it through a Workers VPC service bound to
 // a Cloudflare Tunnel, whose connector runs next to the gateway and only dials out. The Worker is
@@ -32,7 +32,7 @@ async function proxy(request: Request, env: Env, url: URL): Promise<Response> {
     response.headers.delete("Set-Cookie");
     return response;
   } catch {
-    // The tunnel or the VM is down. Say so in the same shape the gateway uses for its own errors.
+    // The tunnel or the machine behind it is down. Say so in the same shape the gateway uses for its own errors.
     return Response.json(
       { error: "backend unreachable", message: "The Vertex server is not answering. It may be restarting." },
       { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "15" } },
