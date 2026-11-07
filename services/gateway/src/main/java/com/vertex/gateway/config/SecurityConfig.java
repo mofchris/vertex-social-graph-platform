@@ -37,6 +37,8 @@ public class SecurityConfig {
                                 "/actuator/prometheus").permitAll()
                         // Public: signup / login / refresh / logout — no access token required.
                         .requestMatchers("/api/identity/v1/auth/**").permitAll()
+                        // Public: aggregated platform health, so a visitor can see it before signing in.
+                        .requestMatchers("/api/status").permitAll()
                         .anyRequest().authenticated())
                 // Missing/invalid token is 401 (not Spring's default 403) — correct REST semantics
                 // for "you are not authenticated", which is what a gateway should say at the edge.

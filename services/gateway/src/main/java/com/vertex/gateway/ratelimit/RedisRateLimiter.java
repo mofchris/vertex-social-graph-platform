@@ -1,6 +1,5 @@
 package com.vertex.gateway.ratelimit;
 
-import com.vertex.gateway.config.RateLimitProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.io.ClassPathResource;
@@ -23,14 +22,10 @@ public class RedisRateLimiter implements RateLimiter {
     private final StringRedisTemplate redis;
     private final RedisScript<List> script;
     private final RateLimiter fallback;
-    private final String capacity;
-    private final String refillPerSecond;
 
-    public RedisRateLimiter(StringRedisTemplate redis, RateLimitProperties props, RateLimiter fallback) {
+    public RedisRateLimiter(StringRedisTemplate redis, RateLimiter fallback) {
         this.redis = redis;
         this.fallback = fallback;
-        this.capacity = String.valueOf(props.capacity());
-        this.refillPerSecond = String.valueOf(props.refillPerSecond());
         DefaultRedisScript<List> redisScript = new DefaultRedisScript<>();
         redisScript.setLocation(new ClassPathResource("scripts/token_bucket.lua"));
         redisScript.setResultType(List.class);
@@ -39,15 +34,17 @@ public class RedisRateLimiter implements RateLimiter {
 
     @Override
     @SuppressWarnings("unchecked")
-    public Decision tryAcquire(String key) {
+    public Decision tryAcquire(String key, Limit limit) {
         try {
+            // The script reads the clock from Redis itself (TIME), so every gateway instance agrees on
+            // "now" and a skewed node can't mint or withhold tokens.
             List<Long> result = redis.execute(script, List.of(key),
-                    capacity, refillPerSecond, String.valueOf(System.currentTimeMillis()), "1");
+                    String.valueOf(limit.capacity()), String.valueOf(limit.refillPerSecond()), "1");
             return new Decision(result.get(0) == 1L, result.get(1), result.get(2));
         } catch (RuntimeException redisUnavailable) {
             log.warn("rate-limit store unavailable, falling back to local limiter: {}",
                     redisUnavailable.getMessage());
-            return fallback.tryAcquire(key);
+            return fallback.tryAcquire(key, limit);
         }
     }
 }

@@ -23,13 +23,13 @@ import java.util.Date;
 import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Verifies the edge rate limiter with the in-process limiter (no Redis): a capacity-1 bucket lets
- * one request through then returns 429 with a Retry-After, and distinct clients are limited
- * independently. Each test uses its own client IP so buckets don't leak across methods.
+ * Verifies the edge rate limiter with the in-process limiter (no Redis). Buckets are tiny so limits
+ * trip immediately; each test uses its own client IPs and users so buckets don't leak across tests.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -44,16 +44,23 @@ class RateLimitIntegrationTest {
     static void config(DynamicPropertyRegistry registry) throws IOException {
         stub = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
         stub.createContext("/", exchange -> {
+            exchange.getRequestBody().readAllBytes();
             byte[] out = "ok".getBytes(StandardCharsets.UTF_8);
             exchange.sendResponseHeaders(200, out.length);
             exchange.getResponseBody().write(out);
             exchange.close();
         });
         stub.start();
-        registry.add("app.gateway.routes.echo", () -> "http://localhost:" + stub.getAddress().getPort());
-        // Capacity 1 so the second request from a client is immediately over the limit.
-        registry.add("app.ratelimit.capacity", () -> "1");
-        registry.add("app.ratelimit.refill-per-second", () -> "1");
+        String base = "http://localhost:" + stub.getAddress().getPort();
+        registry.add("app.gateway.routes.echo", () -> base);
+        registry.add("app.gateway.routes.identity", () -> base);
+        registry.add("app.gateway.client-ip-header", () -> "X-Edge-Client-IP");
+        registry.add("app.ratelimit.capacity", () -> "3");
+        registry.add("app.ratelimit.refill-per-second", () -> "0.01");
+        registry.add("app.ratelimit.auth-capacity", () -> "2");
+        registry.add("app.ratelimit.auth-refill-per-second", () -> "0.01");
+        registry.add("app.ratelimit.write-capacity", () -> "1");
+        registry.add("app.ratelimit.write-refill-per-second", () -> "0.01");
     }
 
     @AfterAll
@@ -66,24 +73,88 @@ class RateLimitIntegrationTest {
     @Test
     void allowsUpToCapacityThenReturns429WithRetryAfter() throws Exception {
         String token = bearer(UUID.randomUUID());
-
-        mvc.perform(get("/api/echo/v1/ping").with(clientIp("10.10.0.1")).header("Authorization", token))
-                .andExpect(status().isOk());
-
-        mvc.perform(get("/api/echo/v1/ping").with(clientIp("10.10.0.1")).header("Authorization", token))
+        for (int i = 0; i < 3; i++) {
+            mvc.perform(get("/api/echo/v1/ping").with(peer("10.10.0.1")).header("Authorization", token))
+                    .andExpect(status().isOk());
+        }
+        mvc.perform(get("/api/echo/v1/ping").with(peer("10.10.0.1")).header("Authorization", token))
                 .andExpect(status().isTooManyRequests())
-                .andExpect(header().exists("Retry-After"));
+                .andExpect(header().exists("Retry-After"))
+                .andExpect(header().string(RateLimitFilter.REMAINING_HEADER, "0"));
+    }
+
+    @Test
+    void reportsTheRemainingBudget() throws Exception {
+        mvc.perform(get("/api/echo/v1/ping").with(peer("10.10.0.9")).header("Authorization", bearer(UUID.randomUUID())))
+                .andExpect(status().isOk())
+                .andExpect(header().string(RateLimitFilter.REMAINING_HEADER, "2"));
     }
 
     @Test
     void differentClientsAreLimitedIndependently() throws Exception {
-        mvc.perform(get("/api/echo/v1/ping").with(clientIp("10.10.0.2")).header("Authorization", bearer(UUID.randomUUID())))
+        mvc.perform(get("/api/echo/v1/ping").with(peer("10.10.0.2")).header("Authorization", bearer(UUID.randomUUID())))
                 .andExpect(status().isOk());
-        mvc.perform(get("/api/echo/v1/ping").with(clientIp("10.10.0.3")).header("Authorization", bearer(UUID.randomUUID())))
+        mvc.perform(get("/api/echo/v1/ping").with(peer("10.10.0.3")).header("Authorization", bearer(UUID.randomUUID())))
                 .andExpect(status().isOk()); // a different IP + user has its own bucket
     }
 
-    private static RequestPostProcessor clientIp(String addr) {
+    @Test
+    void authEndpointsHaveTheirOwnTighterBucket() throws Exception {
+        for (int i = 0; i < 2; i++) {
+            mvc.perform(post("/api/identity/v1/auth/login").with(peer("10.20.0.1")).content("{}"))
+                    .andExpect(status().isOk());
+        }
+        mvc.perform(post("/api/identity/v1/auth/login").with(peer("10.20.0.1")).content("{}"))
+                .andExpect(status().isTooManyRequests());
+        // The general per-IP budget (3) is not what tripped: a non-auth call still goes through.
+        mvc.perform(get("/api/echo/v1/ping").with(peer("10.20.0.1")).header("Authorization", bearer(UUID.randomUUID())))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void writesArePacedPerUser() throws Exception {
+        String token = bearer(UUID.randomUUID());
+        mvc.perform(post("/api/echo/v1/things").with(peer("10.30.0.1")).header("Authorization", token).content("a"))
+                .andExpect(status().isOk());
+        // Same user from a different IP: the per-user write bucket still applies.
+        mvc.perform(post("/api/echo/v1/things").with(peer("10.30.0.2")).header("Authorization", token).content("b"))
+                .andExpect(status().isTooManyRequests());
+        // Reads by that user are unaffected.
+        mvc.perform(get("/api/echo/v1/ping").with(peer("10.30.0.2")).header("Authorization", token))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void usesTheTrustedEdgeHeaderForTheClientIp() throws Exception {
+        // Everything arrives from one peer (as through a tunnel), but the edge says who the client is.
+        for (int i = 0; i < 2; i++) {
+            mvc.perform(post("/api/identity/v1/auth/login").with(peer("127.0.0.1"))
+                            .header("X-Edge-Client-IP", "203.0.113.7").content("{}"))
+                    .andExpect(status().isOk());
+        }
+        mvc.perform(post("/api/identity/v1/auth/login").with(peer("127.0.0.1"))
+                        .header("X-Edge-Client-IP", "203.0.113.7").content("{}"))
+                .andExpect(status().isTooManyRequests());
+        // Another visitor behind the same tunnel is not affected.
+        mvc.perform(post("/api/identity/v1/auth/login").with(peer("127.0.0.1"))
+                        .header("X-Edge-Client-IP", "2001:db8::42").content("{}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void ignoresAMalformedEdgeHeader() throws Exception {
+        // Garbage in the header must not mint a fresh bucket per request: it falls back to the peer.
+        for (int i = 0; i < 2; i++) {
+            mvc.perform(post("/api/identity/v1/auth/login").with(peer("10.40.0.1"))
+                            .header("X-Edge-Client-IP", "not-an-ip-" + i).content("{}"))
+                    .andExpect(status().isOk());
+        }
+        mvc.perform(post("/api/identity/v1/auth/login").with(peer("10.40.0.1"))
+                        .header("X-Edge-Client-IP", "still-not-an-ip").content("{}"))
+                .andExpect(status().isTooManyRequests());
+    }
+
+    private static RequestPostProcessor peer(String addr) {
         return request -> {
             request.setRemoteAddr(addr);
             return request;

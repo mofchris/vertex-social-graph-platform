@@ -5,14 +5,19 @@
 -- KEYS[1] = bucket key (e.g. rl:user:<id> or rl:ip:<addr>)
 -- ARGV[1] = capacity        (max tokens)
 -- ARGV[2] = refillPerSecond (tokens added per second)
--- ARGV[3] = nowMillis       (caller's clock)
--- ARGV[4] = requested       (tokens to take, normally 1)
+-- ARGV[3] = requested       (tokens to take, normally 1)
 -- returns { allowed(0|1), remaining, retryAfterSeconds }
+--
+-- "Now" comes from the Redis server clock, not the caller, so gateway instances with skewed clocks
+-- still agree on how many tokens a bucket holds. Redis >= 5 replicates scripts by effect, so calling
+-- TIME before a write is allowed.
 
 local capacity = tonumber(ARGV[1])
 local refill = tonumber(ARGV[2])
-local now = tonumber(ARGV[3])
-local requested = tonumber(ARGV[4])
+local requested = tonumber(ARGV[3])
+
+local t = redis.call('TIME')
+local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
 
 local state = redis.call('HMGET', KEYS[1], 'tokens', 'ts')
 local tokens = tonumber(state[1])
