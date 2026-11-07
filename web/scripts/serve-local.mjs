@@ -37,7 +37,9 @@ http
       req.pipe(up);
       return;
     }
-    const f = file(url.pathname);
+    // Same nested-segment fallback as worker/index.ts.
+    const m = url.pathname.match(/^(.*\/__next\.[^/]+)\.([^./]+)\.txt$/);
+    const f = file(url.pathname) ?? (m ? file(`${m[1]}/${m[2]}.txt`) : null);
     if (!f) {
       res.writeHead(404, { "content-type": types[".html"] });
       return createReadStream(join(root, "404.html")).pipe(res);

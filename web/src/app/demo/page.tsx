@@ -4,9 +4,14 @@ import { Console } from "@/components/demo/Console";
 export const metadata: Metadata = {
   title: "Live demo",
   description:
-    "Operate the real Vertex backend: follow, post, replay an event and send a poison record, and watch each one cross the gateway, Graph's outbox, Kafka and Notify with real timings.",
+    "Operate the real Vertex backend: follow, post, replay an event, send a poison record, and trace each one through the outbox, Kafka and Notify.",
 };
 
 export default function DemoPage() {
-  return <Console />;
+  return (
+    <>
+      <h1 className="sr-only">Vertex live demo</h1>
+      <Console />
+    </>
+  );
 }

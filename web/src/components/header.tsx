@@ -20,7 +20,7 @@ export function Header() {
         <Link className="nav__link nav__link--wide" href="/#services">
           Services
         </Link>
-        <a className="nav__link" href={site.github} target="_blank" rel="noreferrer">
+        <a className="nav__link" href={site.github} target="_blank" rel="noopener noreferrer">
           Code
         </a>
         <Link className="btn btn--small" href="/demo/" aria-current={onDemo ? "page" : undefined}>

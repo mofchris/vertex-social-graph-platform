@@ -32,3 +32,6 @@ QA_FINDINGS.md
 
 # Internal design handoff (terminal-to-terminal scratch, not for the repo)
 design-research/HANDOFF.md
+
+# Wrangler local state
+.wrangler/

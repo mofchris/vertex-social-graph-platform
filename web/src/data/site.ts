@@ -7,7 +7,7 @@ export const site = {
   github: "https://github.com/mofchris/vertex-social-graph-platform",
   author: "Christopher Mofunanya",
   description:
-    "Vertex is a social network built as seven Java services on Postgres, Redis and Kafka, running live. Follow someone and trace the event through the gateway, an outbox, Kafka and an idempotent consumer.",
+    "A social network built as seven Java services on Postgres, Redis and Kafka, running live. Follow someone and trace the event through an outbox and Kafka.",
   resetUtc: "04:00 UTC",
 };
 

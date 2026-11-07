@@ -9,10 +9,10 @@ export default function Home() {
   return (
     <>
       <section className="hero wrap grid" aria-labelledby="hero-title">
-        <h1 id="hero-title" className="hero__title display" data-split="lines" data-intro>
+        <h1 id="hero-title" className="hero__title display">
           A social network, taken apart so you can watch it work.
         </h1>
-        <div className="hero__copy" data-reveal="up" data-intro data-delay="0.25">
+        <div className="hero__copy">
           <p className="lede">
             Seven Java services on Postgres, Redis and Kafka, running live on one free server. Follow someone, and
             the demo shows the event cross the gateway, an outbox, Kafka and an idempotent consumer.
@@ -24,7 +24,7 @@ export default function Home() {
                 →
               </span>
             </Link>
-            <a className="link" href={site.github} target="_blank" rel="noreferrer">
+            <a className="link" href={site.github} target="_blank" rel="noopener noreferrer">
               Read the code
             </a>
           </div>

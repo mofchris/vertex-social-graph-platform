@@ -19,12 +19,12 @@ export function Footer() {
             </Link>
           </li>
           <li>
-            <a className="link" href={site.github} target="_blank" rel="noreferrer">
+            <a className="link" href={site.github} target="_blank" rel="noopener noreferrer">
               Source on GitHub
             </a>
           </li>
           <li>
-            <a className="link" href={`${site.github}#architecture`} target="_blank" rel="noreferrer">
+            <a className="link" href={`${site.github}#architecture`} target="_blank" rel="noopener noreferrer">
               Architecture notes
             </a>
           </li>

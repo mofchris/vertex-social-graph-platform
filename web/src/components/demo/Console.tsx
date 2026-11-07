@@ -60,9 +60,9 @@ function Start({
   }, []);
   return (
     <section ref={root} className="start grid" aria-labelledby="start-title">
-      <h1 id="start-title" className="start__title display" data-enter>
+      <h2 id="start-title" className="start__title display">
         Put a probe on a live social network.
-      </h1>
+      </h2>
       <div className="start__body" data-enter>
         <p className="lede">
           You get a throwaway account and a partner: one of the 80 seeded people, signed in beside you so you can watch
@@ -135,7 +135,6 @@ function Bench({ d, health }: { d: D; health: ReturnType<typeof useHealth> }) {
 
   return (
     <div className="console">
-      <h1 className="sr-only">Vertex live demo</h1>
       <div className="console__bar screen" role="region" aria-label="Session">
         <div className="console__bar-group">
           <span className="console__bar-item">
@@ -229,7 +228,7 @@ function Bench({ d, health }: { d: D; health: ReturnType<typeof useHealth> }) {
           {!current && (
             <p className="notice" style={{ margin: "0 1rem 1rem" }}>
               That is the whole pipeline. Next: follow a few people below and read your feed, or{" "}
-              <a className="link" href={site.github} target="_blank" rel="noreferrer">
+              <a className="link" href={site.github} target="_blank" rel="noopener noreferrer">
                 read how each service is built
               </a>
               .

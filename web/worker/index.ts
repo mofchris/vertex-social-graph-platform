@@ -40,10 +40,25 @@ async function proxy(request: Request, env: Env, url: URL): Promise<Response> {
   }
 }
 
+/**
+ * Next's static export writes a nested segment's prefetch data as `__next.demo/__PAGE__.txt`, but
+ * the client asks for `__next.demo.__PAGE__.txt`. Retry the nested path before giving up.
+ */
+function nestedSegmentPath(pathname: string): string | null {
+  const m = pathname.match(/^(.*\/__next\.[^/]+)\.([^./]+)\.txt$/);
+  return m ? `${m[1]}/${m[2]}.txt` : null;
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname.startsWith("/api/")) return proxy(request, env, url);
-    return env.ASSETS.fetch(request);
+    const response = await env.ASSETS.fetch(request);
+    const nested = response.status === 404 ? nestedSegmentPath(url.pathname) : null;
+    if (nested) {
+      const retry = await env.ASSETS.fetch(new Request(new URL(nested + url.search, url), request));
+      if (retry.ok) return retry;
+    }
+    return response;
   },
 } satisfies ExportedHandler<Env>;
