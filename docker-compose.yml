@@ -26,8 +26,11 @@ x-service: &service
     APP_JWT_SECRET: *jwt
     # Size the heap from the container limit (not the host), keep thread stacks and JIT caches
     # small, and use the serial collector: these services are small and mostly idle.
+    # The heap floor is committed and touched at start, so each service's memory is reserved up
+    # front and doesn't shrink and regrow between visitors (this also keeps the free Oracle VM's
+    # memory use above its 20% idle-reclaim line; see deploy/README.md).
     JAVA_TOOL_OPTIONS: >-
-      -XX:MaxRAMPercentage=65 -XX:+UseSerialGC -Xss512k
+      -XX:InitialRAMPercentage=40 -XX:MaxRAMPercentage=65 -XX:+AlwaysPreTouch -XX:+UseSerialGC -Xss512k
       -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=160m -XX:+ExitOnOutOfMemoryError
 
 x-db-env: &db-env

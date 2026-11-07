@@ -68,6 +68,25 @@ After a reboot, Docker starts and `vertex.service` brings the stack back; every 
 ## Free-tier limits that apply
 
 - Oracle Always Free A1: 2 OCPU and 12 GB in total, 200 GB of block storage, 10 TB of outbound
-  data a month. Oracle may reclaim an Always Free instance that stays idle (CPU, network and memory
-  all under 20%) for 7 days; the stack keeps about 3 GB of 12 GB in use.
+  data a month. Keep the account on the Free Tier (never upgrade to Pay As You Go) and use only
+  "Always Free-eligible" resources; a $1 budget alert in Billing acts as a tripwire.
 - Cloudflare Workers free plan: 100,000 requests a day. Workers VPC is free while in beta.
+
+## Idle reclamation
+
+Oracle may reclaim an Always Free VM when, over 7 days, CPU (95th percentile), network **and**
+memory (A1 shapes) are **all** under 20%. CPU and network are often low between visitors; memory
+is the margin: each JVM commits and pre-touches a heap floor at start (`InitialRAMPercentage=40`,
+`AlwaysPreTouch` in `docker-compose.yml`), so the stack keeps about 3 GB of 12 GB (about 25%)
+resident whether or not anyone is visiting, and the nightly reset is
+a real daily burst of CPU and network. Check with `deploy/vertex.sh status`; if memory ever drifts
+toward 20%, raise the JVM heap floor rather than generating fake traffic.
+
+If the VM is reclaimed anyway, only the VM is lost (the site stays up and reports the backend as
+offline). Recovery takes about 30 minutes and needs no Cloudflare changes, because the gateway's
+address lives inside Docker and the tunnel dials out from whichever VM holds its token:
+
+1. Create a new VM (same shape, Ubuntu 24.04, your SSH key).
+2. Run `deploy/bootstrap-vm.sh`.
+3. Fill `deploy/.env` with the same `TUNNEL_TOKEN` and two new random secrets.
+4. `sudo systemctl start vertex`. The seed job recreates the demo data.
