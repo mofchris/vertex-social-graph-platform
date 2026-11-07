@@ -13,6 +13,8 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Instant;
 import java.util.List;
@@ -42,15 +44,24 @@ public class NotificationService {
      * at-least-once) finds the id already present and is skipped, so the same event never produces
      * two notifications or double-bumps a coalesced count. Returns {@code true} if this call did the
      * work, {@code false} if it was a duplicate.
+     *
+     * <p>The duplicate check is itself the bookkeeping: one atomic {@code UPDATE ... SET
+     * duplicates_ignored = duplicates_ignored + 1} that touches a row only if the id is already in the
+     * ledger. If it touched one, this delivery is a repeat — counted, and nothing else happens. If not,
+     * we insert the ledger row (with where the record came from: partition and offset) and flush it
+     * before producing the notification, so two concurrent first deliveries collide on the primary
+     * key rather than both notifying. The loser's transaction is rolled back and its delivery fails;
+     * the error handler retries it, and the retry takes the duplicate path and is counted.
      */
     @Transactional
-    public boolean ingestEvent(UUID eventId, UUID recipientId, NotificationType type, UUID targetId, UUID actorId) {
-        if (processedEvents.existsById(eventId)) {
-            log.debug("skipping already-processed event {}", eventId);
+    public boolean ingestEvent(UUID eventId, UUID recipientId, NotificationType type, UUID targetId, UUID actorId,
+                               Integer partition, Long offset) {
+        if (processedEvents.recordDuplicate(eventId, Instant.now()) > 0) {
+            log.debug("ignoring duplicate delivery of event {} (partition {} offset {})", eventId, partition, offset);
             return false;
         }
         try {
-            processedEvents.save(new ProcessedEvent(eventId));
+            processedEvents.save(new ProcessedEvent(eventId, type.name(), actorId, recipientId, partition, offset));
             // Flush the ledger row now so a concurrent redelivery collides on the primary key here
             // rather than silently producing a second notification.
             repository.flush();
@@ -64,7 +75,11 @@ public class NotificationService {
 
     /**
      * Turn an event into a notification, coalescing into the recipient's existing unread row
-     * for the same (type, target) if one exists. Pushes the result to any open SSE stream.
+     * for the same (type, target) if one exists, and push the result to any open SSE stream.
+     *
+     * <p>The push waits for the commit: pushing from inside the transaction could show the
+     * recipient a notification that then rolls back (e.g. the ledger insert in
+     * {@link #ingestEvent} loses a race) and never exists.
      */
     @Transactional
     public NotificationResponse ingest(UUID recipientId, NotificationType type, UUID targetId, UUID actorId) {
@@ -83,8 +98,21 @@ public class NotificationService {
         notification = repository.saveAndFlush(notification);
 
         NotificationResponse response = NotificationResponse.from(notification);
-        sse.push(recipientId, response);
+        pushAfterCommit(recipientId, response);
         return response;
+    }
+
+    private void pushAfterCommit(UUID recipientId, NotificationResponse response) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            sse.push(recipientId, response); // no transaction to wait for
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                sse.push(recipientId, response);
+            }
+        });
     }
 
     @Transactional(readOnly = true)

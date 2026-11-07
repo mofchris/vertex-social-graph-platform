@@ -3,6 +3,7 @@ package com.vertex.graph.web;
 import com.vertex.graph.service.GraphService;
 import com.vertex.graph.web.dto.CountsResponse;
 import com.vertex.graph.web.dto.FriendsPage;
+import com.vertex.graph.web.dto.PopularPage;
 import com.vertex.graph.web.dto.RelationshipResponse;
 import com.vertex.graph.web.dto.UserPage;
 import org.springframework.http.HttpStatus;
@@ -105,6 +106,12 @@ public class GraphController {
             @RequestParam(required = false) UUID cursor,
             @RequestParam(defaultValue = "50") int limit) {
         return graph.listFriends(userId, cursor, limit);
+    }
+
+    /** Most-followed users the caller could follow (excludes the caller and block relationships). */
+    @GetMapping("/v1/popular")
+    public PopularPage popular(@RequestParam(defaultValue = "12") int limit, Authentication auth) {
+        return graph.popular(actor(auth), limit);
     }
 
     @GetMapping("/v1/followers/{userId}")

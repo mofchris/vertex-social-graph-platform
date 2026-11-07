@@ -3,6 +3,7 @@ package com.vertex.graph.web;
 import com.vertex.graph.exception.BadRequestException;
 import com.vertex.graph.exception.ConflictException;
 import com.vertex.graph.exception.NotFoundException;
+import com.vertex.graph.exception.PipelineDisabledException;
 import com.vertex.graph.web.dto.ErrorResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -22,6 +23,12 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleNotFound(NotFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(ErrorResponse.of(HttpStatus.NOT_FOUND.value(), "not_found", ex.getMessage()));
+    }
+
+    @ExceptionHandler(PipelineDisabledException.class)
+    public ResponseEntity<ErrorResponse> handlePipelineDisabled(PipelineDisabledException ex) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ErrorResponse.of(HttpStatus.SERVICE_UNAVAILABLE.value(), "pipeline_disabled", ex.getMessage()));
     }
 
     @ExceptionHandler(ConflictException.class)

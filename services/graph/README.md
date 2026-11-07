@@ -66,6 +66,10 @@ Mutations return `204 No Content`.
 | GET    | `/v1/relationship/{userId}`     | Your relationship to a user (see below)            |
 | GET    | `/v1/counts/{userId}`           | `{ followers, following, friends }`                |
 | GET    | `/v1/friends?cursor=&limit=`    | Your friends, cursor-paginated (default limit 20)  |
+| GET    | `/v1/popular?limit=`            | Most-followed users you could follow (default 12, max 50) |
+| GET    | `/v1/events/mine?limit=`        | Your own recent outbox rows, newest first (default 10, max 50) |
+| POST   | `/v1/events/{eventId}/replay`   | Re-enqueue one of your events, same `eventId` (202) |
+| POST   | `/v1/events/poison`             | Enqueue a deliberately malformed message (202)     |
 
 `GET /v1/relationship/{userId}` returns:
 
@@ -79,6 +83,39 @@ Mutations return `204 No Content`.
   "blockedBy": false
 }
 ```
+
+`GET /v1/popular` returns `{ "items": [ { "userId": "...", "followers": 3 } ] }` — live follower
+counts, descending (ties by id), excluding you and anyone in a block relationship with you. Works
+in every profile; it's how a brand-new account finds people to follow.
+
+### System trace (what happened to my action?)
+
+Every outbox row records its actor and a `kind` (`EVENT` | `REPLAY` | `POISON`), so the UI can show
+a visitor the real lifecycle of their own action. Items from `/v1/events/mine`, and the `202` body of
+replay / poison, have this shape:
+
+```json
+{
+  "outboxId": "...",          // the outbox row (a replay gets a new one)
+  "eventId": "...",           // the idempotency key; null for POISON
+  "type": "FOLLOW",           // FOLLOW | FRIEND_REQUEST | FRIEND_ACCEPT; null for POISON
+  "kind": "EVENT",            // EVENT | REPLAY | POISON
+  "actorId": "...",
+  "recipientId": "...",       // null for POISON
+  "topic": "social.events",
+  "createdAt": "...",
+  "publishedAt": null         // null = still waiting in the outbox; set once the broker acked it
+}
+```
+
+- **Replay** copies the identical payload and key (same `eventId`) of one of *your* events into a
+  new `REPLAY` row, so it travels outbox → Kafka again exactly like a redelivery — Notify should
+  count it as a duplicate and not notify twice. `404` if the event isn't yours, doesn't exist, or
+  was already purged from the outbox (published rows are kept `OUTBOX_RETENTION_HOURS`, default 24).
+- **Poison** enqueues a JSON object truncated mid-string (marked `"vertexPoison":true`), keyed by
+  *your* id, on `social.events`. Notify can't parse it and dead-letters it to `social.events.DLT`.
+- Both go through the normal outbox, so ordering and retry are unchanged. Without the `kafka`
+  profile there is no relay, so both return `503 pipeline_disabled` instead of queueing forever.
 
 Observability: `GET /actuator/health`, `GET /actuator/prometheus`.
 
@@ -102,6 +139,7 @@ curl -s -X POST localhost:8082/v1/block/<bobId>         -H "$A"   # block drops 
 | `follows`     | directed `(follower_id, followee_id)`, unique — duplicate = no-op      |
 | `friendships` | one row per **unordered pair** (`pair_key = "minId:maxId"`, unique), with a directed `requester/addressee` and `status` PENDING/ACCEPTED |
 | `blocks`      | directed `(blocker_id, blocked_id)`, unique                           |
+| `outbox_events` | staged Kafka messages: topic, key, payload, `published_at`, plus trace columns `actor_id`, `kind`, `event_id`, `event_type`, `recipient_id` |
 
 The single-row-per-pair friendship design is what lets two crossing requests collapse into
 one friendship instead of creating two competing edges.
@@ -134,13 +172,14 @@ These map directly to the repo's [`EDGE_CASES.md`](../../EDGE_CASES.md):
 
 ```
 src/main/java/com/vertex/graph/
-├── config/      JwtProperties, SecurityConfig
+├── config/      JwtProperties, SecurityConfig, OutboxConfig
 ├── domain/      Follow, Friendship, Block, FriendshipStatus
-├── repository/  Follow/Friendship/Block repositories
+├── events/      SocialEvent, OutboxEvent/OutboxKind, OutboxEventWriter, OutboxRelay
+├── repository/  Follow/Friendship/Block/Outbox repositories
 ├── security/    JwtService (verify-only), JwtAuthenticationFilter
-├── service/     GraphService (all relationship logic)
-├── web/         GraphController, DTOs, error handling
+├── service/     GraphService (all relationship logic), EventTraceService (system trace)
+├── web/         GraphController, EventTraceController, DTOs, error handling
 src/main/resources/
 ├── application.yml
-└── db/migration/V1__init_graph.sql
+└── db/migration/V1__init_graph.sql, V2__outbox.sql, V3__outbox_trace.sql
 ```

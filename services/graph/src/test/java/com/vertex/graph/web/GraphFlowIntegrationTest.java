@@ -194,6 +194,73 @@ class GraphFlowIntegrationTest {
     }
 
     @Test
+    void popularRanksByFollowersAndExcludesSelfAndBlocks() throws Exception {
+        UUID viewer = UUID.randomUUID();
+        UUID top = UUID.randomUUID();       // 3 followers
+        UUID blocker = UUID.randomUUID();   // 2 followers, but blocks the viewer
+        UUID blocked = UUID.randomUUID();   // 2 followers, but the viewer blocks them
+        UUID modest = UUID.randomUUID();    // 1 follower
+        follow(3, top);
+        follow(2, blocker);
+        follow(2, blocked);
+        follow(1, modest);
+        follow(4, viewer);                  // the most-followed of all, but it's the viewer themself
+
+        mvc.perform(post("/v1/block/" + viewer).header("Authorization", bearer(blocker)))
+                .andExpect(status().isNoContent());
+        mvc.perform(post("/v1/block/" + blocked).header("Authorization", bearer(viewer)))
+                .andExpect(status().isNoContent());
+
+        mvc.perform(get("/v1/popular").header("Authorization", bearer(viewer)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(2))
+                .andExpect(jsonPath("$.items[0].userId").value(top.toString()))
+                .andExpect(jsonPath("$.items[0].followers").value(3))
+                .andExpect(jsonPath("$.items[1].userId").value(modest.toString()))
+                .andExpect(jsonPath("$.items[1].followers").value(1));
+
+        // Someone outside the block relationships sees everyone, the viewer included, in rank order.
+        mvc.perform(get("/v1/popular?limit=3").header("Authorization", bearer(alice)))
+                .andExpect(jsonPath("$.items.length()").value(3))
+                .andExpect(jsonPath("$.items[0].userId").value(viewer.toString()))
+                .andExpect(jsonPath("$.items[0].followers").value(4))
+                .andExpect(jsonPath("$.items[1].userId").value(top.toString()));
+
+        // limit is clamped to 1..50.
+        mvc.perform(get("/v1/popular?limit=0").header("Authorization", bearer(viewer)))
+                .andExpect(jsonPath("$.items.length()").value(1));
+        mvc.perform(get("/v1/popular?limit=500").header("Authorization", bearer(viewer)))
+                .andExpect(jsonPath("$.items.length()").value(2));
+    }
+
+    @Test
+    void popularRequiresAuthentication() throws Exception {
+        mvc.perform(get("/v1/popular")).andExpect(status().is4xxClientError());
+    }
+
+    @Test
+    void traceWritesRefuseWhenThePipelineIsOff() throws Exception {
+        // Default profile: no relay, so a replay/poison row would never leave the outbox.
+        mvc.perform(post("/v1/events/poison").header("Authorization", bearer(alice)))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.error").value("pipeline_disabled"));
+        mvc.perform(post("/v1/events/" + UUID.randomUUID() + "/replay").header("Authorization", bearer(alice)))
+                .andExpect(status().isServiceUnavailable());
+        // Reads still work; nothing is staged without the kafka profile.
+        mvc.perform(get("/v1/events/mine").header("Authorization", bearer(alice)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(0));
+    }
+
+    /** {@code n} fresh users each follow {@code target}. */
+    private void follow(int n, UUID target) throws Exception {
+        for (int i = 0; i < n; i++) {
+            mvc.perform(post("/v1/follow/" + target).header("Authorization", bearer(UUID.randomUUID())))
+                    .andExpect(status().isNoContent());
+        }
+    }
+
+    @Test
     void writesRequireAuthentication() throws Exception {
         mvc.perform(post("/v1/follow/" + bob)).andExpect(status().is4xxClientError());
     }

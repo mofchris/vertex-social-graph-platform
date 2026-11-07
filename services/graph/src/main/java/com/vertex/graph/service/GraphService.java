@@ -15,6 +15,7 @@ import com.vertex.graph.repository.FriendshipRepository;
 import com.vertex.graph.web.dto.CountsResponse;
 import com.vertex.graph.web.dto.FriendStatus;
 import com.vertex.graph.web.dto.FriendsPage;
+import com.vertex.graph.web.dto.PopularPage;
 import com.vertex.graph.web.dto.RelationshipResponse;
 import com.vertex.graph.web.dto.UserPage;
 import org.springframework.context.ApplicationEventPublisher;
@@ -32,6 +33,7 @@ import java.util.function.Function;
 public class GraphService {
 
     private static final int MAX_PAGE_SIZE = 100;
+    private static final int MAX_POPULAR = 50;
 
     private final FollowRepository follows;
     private final FriendshipRepository friendships;
@@ -225,6 +227,17 @@ public class GraphService {
                 ? follows.followingFirstPage(userId, fetch)
                 : follows.followingAfter(userId, cursor, fetch);
         return pageOf(rows, pageSize, Follow::getFolloweeId);
+    }
+
+    /**
+     * The most-followed users the viewer could actually follow (not themselves, nobody in a block
+     * relationship with them). This is what gives a brand-new account people to follow before it
+     * has any graph of its own; counts are live, so they match {@code GET /v1/counts/{id}}.
+     */
+    @Transactional(readOnly = true)
+    public PopularPage popular(UUID viewer, int limit) {
+        int size = Math.clamp(limit, 1, MAX_POPULAR);
+        return new PopularPage(follows.mostFollowed(viewer, Limit.of(size)));
     }
 
     private UserPage pageOf(List<Follow> rows, int pageSize, Function<Follow, UUID> extractor) {
