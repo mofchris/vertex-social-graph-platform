@@ -1,24 +1,48 @@
-# Full-platform local stack: one command boots every Vertex service against a shared Postgres,
-# Redis, and a single-node Kafka (KRaft mode — no ZooKeeper). Free / $0, runs entirely on your
-# machine.
+# The whole Vertex platform on one machine: Postgres, Redis, a single-node Kafka (KRaft, no
+# ZooKeeper), the seven Spring Boot services, and a one-shot job that seeds demo data.
 #
-#   docker compose up --build
+#   docker compose up -d --build        # first build takes ~10 minutes; later starts ~1 minute
 #
-# Ports: identity 8080 · profile 8081 · graph 8082 · feed 8083 · notify 8084 · recommend 8085.
-# Seed it once everything is healthy:  bash scripts/seed-demo.sh
+# Then open the web app (see web/README.md) or call the gateway on http://localhost:8088.
+# Service ports 8080-8085 are published too, for debugging; production (deploy/) publishes nothing.
 #
-# graph and notify run the `kafka` profile, so a follow / friend event flows end-to-end:
-#   Graph --(transactional outbox)--> Kafka topic social.events --> Notify (idempotent consumer).
-# Everything else (identity, profile, feed) runs the `postgres` profile.
+# Every container has a memory cap, a health check, a restart policy and rotated logs, so the same
+# file runs unattended on a small VM. The caps add up to about 5 GB; real use is about 3 GB.
 
-x-jwt-secret: &jwt "change-me-in-prod-use-a-long-random-secret-0123456789"
+x-jwt-secret: &jwt ${APP_JWT_SECRET:-local-dev-only-secret-change-me-0123456789abcdef}
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+# Shared by the seven Spring Boot services.
+x-service: &service
+  restart: unless-stopped
+  logging: *logging
+  mem_limit: 512m
+  environment: &service-env
+    APP_JWT_SECRET: *jwt
+    # Size the heap from the container limit (not the host), keep thread stacks and JIT caches
+    # small, and use the serial collector: these services are small and mostly idle.
+    JAVA_TOOL_OPTIONS: >-
+      -XX:MaxRAMPercentage=65 -XX:+UseSerialGC -Xss512k
+      -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=160m -XX:+ExitOnOutOfMemoryError
+
+x-db-env: &db-env
+  DB_USERNAME: vertex
+  DB_PASSWORD: ${POSTGRES_PASSWORD:-vertex}
 
 services:
   postgres:
     image: postgres:16
+    restart: unless-stopped
+    logging: *logging
+    mem_limit: 512m
     environment:
       POSTGRES_USER: vertex
-      POSTGRES_PASSWORD: vertex
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vertex}
       POSTGRES_DB: vertex
     ports:
       - "5432:5432"
@@ -29,23 +53,32 @@ services:
       test: ["CMD-SHELL", "pg_isready -U vertex"]
       interval: 5s
       timeout: 3s
-      retries: 20
+      retries: 30
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
+    logging: *logging
+    mem_limit: 128m
+    # A cache and rate-limit store: bounded memory, evict least-recently-used keys, no disk.
+    command: ["redis-server", "--maxmemory", "96mb", "--maxmemory-policy", "allkeys-lru", "--save", ""]
     ports:
       - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
-      retries: 20
+      retries: 30
 
   kafka:
     image: apache/kafka:3.8.1
+    restart: unless-stopped
+    logging: *logging
+    mem_limit: 768m
     ports:
       - "9092:9092"
     environment:
+      KAFKA_HEAP_OPTS: "-Xms256m -Xmx384m"
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
       KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
@@ -53,34 +86,47 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
-      # Single-node dev broker: one replica is all there is.
+      # Single-node broker: one replica is all there is.
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       # social.events and social.events.DLT are created on first use.
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      # Keep three days of events, in small segments, so the disk can't fill up.
+      KAFKA_LOG_RETENTION_HOURS: 72
+      KAFKA_LOG_SEGMENT_BYTES: 16777216
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    volumes:
+      - kafkadata:/var/lib/kafka/data
     healthcheck:
-      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 || exit 1"]
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1 || exit 1"]
       interval: 10s
-      timeout: 5s
-      retries: 20
+      timeout: 10s
+      retries: 30
+      start_period: 20s
 
   identity:
+    <<: *service
     build: ./services/identity
     depends_on:
       postgres:
         condition: service_healthy
     environment:
+      <<: [*service-env, *db-env]
       SPRING_PROFILES_ACTIVE: postgres
       DB_URL: jdbc:postgresql://postgres:5432/identity
-      DB_USERNAME: vertex
-      DB_PASSWORD: vertex
-      APP_JWT_SECRET: *jwt
     ports:
       - "8080:8080"
+    healthcheck: &health
+      test: ["CMD-SHELL", "curl -fsS localhost:$${SERVER_PORT:-8080}/actuator/health/readiness > /dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
 
   profile:
+    <<: *service
     build: ./services/profile
     depends_on:
       postgres:
@@ -88,18 +134,19 @@ services:
       redis:
         condition: service_healthy
     environment:
+      <<: [*service-env, *db-env]
       SPRING_PROFILES_ACTIVE: postgres
+      SERVER_PORT: "8081"
       DB_URL: jdbc:postgresql://postgres:5432/profile
-      DB_USERNAME: vertex
-      DB_PASSWORD: vertex
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       GRAPH_BASE_URL: http://graph:8082
-      APP_JWT_SECRET: *jwt
     ports:
       - "8081:8081"
+    healthcheck: *health
 
   graph:
+    <<: *service
     build: ./services/graph
     depends_on:
       postgres:
@@ -107,33 +154,35 @@ services:
       kafka:
         condition: service_healthy
     environment:
+      <<: [*service-env, *db-env]
       SPRING_PROFILES_ACTIVE: postgres,kafka
+      SERVER_PORT: "8082"
       DB_URL: jdbc:postgresql://postgres:5432/graph
-      DB_USERNAME: vertex
-      DB_PASSWORD: vertex
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      APP_JWT_SECRET: *jwt
     ports:
       - "8082:8082"
+    healthcheck: *health
 
   feed:
+    <<: *service
     build: ./services/feed
     depends_on:
       postgres:
         condition: service_healthy
       graph:
-        condition: service_started
+        condition: service_healthy
     environment:
+      <<: [*service-env, *db-env]
       SPRING_PROFILES_ACTIVE: postgres
+      SERVER_PORT: "8083"
       DB_URL: jdbc:postgresql://postgres:5432/feed
-      DB_USERNAME: vertex
-      DB_PASSWORD: vertex
       GRAPH_BASE_URL: http://graph:8082
-      APP_JWT_SECRET: *jwt
     ports:
       - "8083:8083"
+    healthcheck: *health
 
   notify:
+    <<: *service
     build: ./services/notify
     depends_on:
       postgres:
@@ -141,51 +190,48 @@ services:
       kafka:
         condition: service_healthy
     environment:
+      <<: [*service-env, *db-env]
       SPRING_PROFILES_ACTIVE: postgres,kafka
+      SERVER_PORT: "8084"
       DB_URL: jdbc:postgresql://postgres:5432/notify
-      DB_USERNAME: vertex
-      DB_PASSWORD: vertex
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      APP_JWT_SECRET: *jwt
     ports:
       - "8084:8084"
+    healthcheck: *health
 
   recommend:
+    <<: *service
     build: ./services/recommend
+    mem_limit: 384m
     depends_on:
       graph:
-        condition: service_started
+        condition: service_healthy
     environment:
+      <<: *service-env
+      SERVER_PORT: "8085"
       GRAPH_BASE_URL: http://graph:8082
-      APP_JWT_SECRET: *jwt
     ports:
       - "8085:8085"
+    healthcheck: *health
 
   # The single front door: routes /api/<service>/** to the services, verifies the JWT at the edge,
-  # and rate-limits (distributed via Redis under the `redis` profile). The service ports above stay
-  # exposed for the demo seed and local debugging; real clients would go through the gateway.
+  # and rate-limits (token buckets in Redis under the `redis` profile).
   gateway:
+    <<: *service
     build: ./services/gateway
+    mem_limit: 384m
     depends_on:
       redis:
         condition: service_healthy
       identity:
-        condition: service_started
-      profile:
-        condition: service_started
-      graph:
-        condition: service_started
-      feed:
-        condition: service_started
-      notify:
-        condition: service_started
-      recommend:
-        condition: service_started
+        condition: service_healthy
     environment:
+      <<: *service-env
       SPRING_PROFILES_ACTIVE: redis
+      SERVER_PORT: "8088"
       REDIS_HOST: redis
       REDIS_PORT: "6379"
-      APP_JWT_SECRET: *jwt
+      CLIENT_IP_HEADER: ${CLIENT_IP_HEADER:-}
       IDENTITY_BASE_URL: http://identity:8080
       PROFILE_BASE_URL: http://profile:8081
       GRAPH_BASE_URL: http://graph:8082
@@ -194,6 +240,33 @@ services:
       RECOMMEND_BASE_URL: http://recommend:8085
     ports:
       - "8088:8088"
+    healthcheck: *health
+
+  # One-shot: once every service is healthy, populate ~80 demo users by calling the real APIs.
+  # Skips itself if the demo users already exist, so `docker compose up` stays idempotent.
+  seed:
+    image: alpine:3.22
+    restart: "no"
+    logging: *logging
+    depends_on:
+      identity: { condition: service_healthy }
+      profile: { condition: service_healthy }
+      graph: { condition: service_healthy }
+      feed: { condition: service_healthy }
+      notify: { condition: service_healthy }
+      recommend: { condition: service_healthy }
+    environment:
+      ID_URL: http://identity:8080
+      PROFILE_URL: http://profile:8081
+      GRAPH_URL: http://graph:8082
+      FEED_URL: http://feed:8083
+      NOTIFY_URL: http://notify:8084
+      RECOMMEND_URL: http://recommend:8085
+      SKIP_IF_SEEDED: "1"
+    volumes:
+      - ./scripts:/scripts:ro
+    entrypoint: ["/bin/sh", "-c", "apk add --no-cache bash curl > /dev/null && exec bash /scripts/seed-demo.sh"]
 
 volumes:
   pgdata:
+  kafkadata:

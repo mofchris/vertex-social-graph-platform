@@ -1,0 +1,16 @@
+[Unit]
+Description=Vertex demo stack (Docker Compose)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=ubuntu
+WorkingDirectory=/opt/vertex
+ExecStart=/opt/vertex/deploy/vertex.sh up
+TimeoutStartSec=1800
+
+[Install]
+WantedBy=multi-user.target
