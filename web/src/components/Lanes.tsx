@@ -3,6 +3,17 @@ import type { CSSProperties, Ref } from "react";
 export type LaneSpec = { id: string; label: string; mark?: string; start: number; end: number; on?: boolean; fault?: boolean };
 
 /**
+ * Where a lane's label sits, so it never crosses a pulse edge or leaves the track: after a pulse
+ * that ends early, before one that starts late, otherwise inside the (long) pulse.
+ */
+function markPlace(l: LaneSpec): CSSProperties {
+  if (l.start >= 100) return { left: "calc(2% + 0.5rem)" };
+  if (l.end <= 60) return { left: `calc(${l.end}% + 0.5rem)` };
+  if (l.start >= 40) return { right: `calc(${100 - l.start}% + 0.5rem)` };
+  return { left: `calc(${l.start}% + 0.5rem)` };
+}
+
+/**
  * Logic-analyzer lanes. Each lane is a baseline with one pulse between `start` and `end`
  * (0 to 100 along the time axis). Pure markup: the home schematic scrubs it with GSAP, the demo
  * renders it from real timings.
@@ -45,7 +56,7 @@ export function Lanes({
                 <span
                   className="lane__mark"
                   style={{
-                    left: `calc(${Math.min(l.start >= 100 ? 2 : l.end, 70)}% + 0.5rem)`,
+                    ...markPlace(l),
                     ...(l.fault ? { color: "var(--c-fault-screen)" } : {}),
                     ...(l.start >= 100 ? { color: "var(--c-screen-muted)" } : {}),
                   }}

@@ -38,8 +38,11 @@ Needs WSL 2 with Ubuntu, `systemd=true` in `/etc/wsl.conf`, and Docker Engine in
 6. **Power settings** (yours to set): the demo is live only while the PC is awake, so set sleep
    to "Never" when plugged in if you want it up around the clock.
 
-To take it down for good: delete the Startup shortcut, then
-`wsl -d Ubuntu -u root --exec systemctl disable --now vertex vertex-reset.timer`.
+To pause it: move the shortcut out of the Startup folder (for example to `%LOCALAPPDATA%\Vertex`),
+run `wsl -d Ubuntu -u root --exec systemctl disable --now vertex vertex-reset.timer`, then
+`wsl --shutdown`. To resume: move the shortcut back into `shell:startup`, run
+`wsl -d Ubuntu -u root --exec systemctl enable --now vertex vertex-reset.timer`, and open the
+shortcut once (or log out and in).
 
 ## On a Linux VM (Oracle Cloud Always Free)
 
