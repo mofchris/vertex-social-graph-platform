@@ -12,8 +12,8 @@
 #
 # It installs Docker from Docker's own apt repository, adds swap (the first image build is the
 # memory peak; skipped under WSL, which has its own swap), clones the repo to /opt/vertex and
-# installs the systemd units that start the stack
-# at boot and reset the demo nightly. It does not start the stack: fill in deploy/.env first, then
+# installs the systemd units that start the stack at boot and reset the demo nightly. It does
+# not start the stack: fill in deploy/.env first, then
 #   sudo systemctl start vertex
 set -euo pipefail
 
@@ -56,8 +56,9 @@ fi
 chmod +x "$DIR"/deploy/*.sh
 
 echo "==> systemd units (start on boot, nightly reset)"
-sudo cp "$DIR"/deploy/systemd/vertex.service "$DIR"/deploy/systemd/vertex-reset.service \
-        "$DIR"/deploy/systemd/vertex-reset.timer /etc/systemd/system/
+for unit in vertex.service vertex-reset.service vertex-reset.timer; do
+  sed "s/^User=ubuntu\$/User=$RUN_AS/" "$DIR/deploy/systemd/$unit" | sudo tee "/etc/systemd/system/$unit" > /dev/null
+done
 sudo systemctl daemon-reload
 sudo systemctl enable vertex.service vertex-reset.timer
 
