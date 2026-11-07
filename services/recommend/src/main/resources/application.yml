@@ -28,3 +28,7 @@ app:
     # of each we sample. Bounds the work so a high-degree node doesn't blow up traversal.
     max-seed-friends: ${MAX_SEED_FRIENDS:50}
     max-sample-per-friend: ${MAX_SAMPLE_PER_FRIEND:100}
+    # Cold-start fallback: how many of Graph's most-followed users to fetch when
+    # friends-of-friends comes up short. Extra headroom covers users filtered out locally
+    # (already friends/followed/suggested); only survivors cost a relationship check.
+    popular-fetch-limit: ${POPULAR_FETCH_LIMIT:50}

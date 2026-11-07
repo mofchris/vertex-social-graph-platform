@@ -41,9 +41,10 @@ docker compose up --build
 ./mvnw test
 ```
 
-A unit test proves the read-through cache (second read served from cache); an integration
-test drives the full API against H2 + the simple cache (no Docker), including cache
-eviction on update.
+A unit test proves the read-through cache (second read served from cache, batch reads share
+the same entries and load only misses); an integration test drives the full API against H2 +
+the simple cache (no Docker), including cache eviction on update and the batch endpoint's
+privacy rules, 100-id cap and malformed-id handling.
 
 ## API
 
@@ -55,6 +56,7 @@ Identity-issued access token.
 | PUT    | `/me/profile`         | required     | Create or replace the caller's own profile        |
 | GET    | `/me/profile`         | required     | The caller's own profile                          |
 | GET    | `/profiles/{userId}`  | optional     | A user's profile, subject to its visibility       |
+| GET    | `/profiles?ids=a,b,…` | optional     | Up to 100 profiles at once, same visibility rules |
 
 Observability: `GET /actuator/health`, `GET /actuator/prometheus`.
 
@@ -76,6 +78,29 @@ viewer's bearer token to `GET {graph}/v1/relationship/{ownerId}` and shows the p
 if `friendStatus == FRIENDS`. If Graph is unreachable it **fails closed** (treats the viewer
 as not-a-friend), so an outage can't leak a private-ish profile. Configure the Graph
 endpoint with `app.graph.base-url` (env `GRAPH_BASE_URL`, default `http://localhost:8082`).
+
+### Batch read
+
+`GET /v1/profiles?ids=<uuid>,<uuid>,...` exists for UIs that only hold user ids (feeds,
+notifications, suggestions). Repeated `ids=` params also work. Response:
+
+```json
+{ "items": [ { "userId": "...", "displayName": "Alice", "bio": "...", "avatarUrl": null,
+               "location": null, "visibility": "PUBLIC", "updatedAt": "..." } ] }
+```
+
+- **Same rules as the single read.** Each profile goes through the same per-viewer check.
+- **Hidden and missing profiles are omitted**, not stubbed. That matches the single read's
+  silent 404: a caller can't tell a private profile from one that doesn't exist, and no
+  hidden field (not even `visibility`) is returned. Results keep the request order, with
+  duplicate ids dropped.
+- **Limits.** At most 100 ids; more, a malformed id (non-canonical UUIDs and empty entries
+  included), or no ids at all gives **400** `validation_failed` with `fieldErrors.ids`.
+- **Efficient.** Cache hits come from the same `profiles` entries as the single read; all
+  misses load in one `findAllById` query and are then cached. Graph has no batch
+  relationship API, so FRIENDS profiles still need one Graph check each, but only for
+  FRIENDS profiles the viewer doesn't own, run in parallel (at most 8 at a time), and never
+  for anonymous viewers. Each check fails closed, as in the single read.
 
 ### Example
 
@@ -108,6 +133,8 @@ read repopulates from the database with fresh data.
 - **Privacy at serve time:** the cache stores the full profile (including `visibility`);
   visibility is applied per-viewer after the cache read, so one cached entry serves every
   viewer correctly.
+- **Batch reads** (`ProfileCache.loadAll`) use the same cache entries programmatically:
+  hits from the cache, misses in one query, then cached.
 - **Not-found is not cached** today. Negative caching (to defend against cache penetration)
   is a deliberate next step — see [`EDGE_CASES.md`](../../EDGE_CASES.md).
 
@@ -120,7 +147,7 @@ src/main/java/com/vertex/profile/
 ├── domain/      Profile, ProfileVisibility
 ├── repository/  ProfileRepository
 ├── security/    JwtService (verify-only), JwtAuthenticationFilter
-├── service/     ProfileCache (@Cacheable), ProfileService, CachedProfile
+├── service/     ProfileCache (@Cacheable + batch loadAll), ProfileService, CachedProfile
 ├── web/         ProfileController, DTOs, error handling
 src/main/resources/
 ├── application.yml
