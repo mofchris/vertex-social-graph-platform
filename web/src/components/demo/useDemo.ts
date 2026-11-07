@@ -9,6 +9,18 @@ import { DEMO_PASSWORD, pickPartnerIndex, randomHandle, randomPassword, seededEm
 
 export type Session = { me: Account; partner: Account; partnerIndex: number };
 export type StepId = "follow" | "followBack" | "post" | "replay" | "poison";
+/** A real run, captured against the live backend, that the site replays when the backend is offline. */
+export type Recording = {
+  recordedAt: string;
+  me: { userId: string; displayName: string };
+  partner: { userId: string; displayName: string };
+  steps: Partial<Record<StepId, Capture>>;
+  myFeed: Post[];
+  myNotes: Notification[];
+  partnerNotes: Notification[];
+  people: Suggestion[];
+  names: Record<string, string>;
+};
 type Arrival = { n: Notification; at: number; to: "me" | "partner" };
 
 const KEY = "vertex.demo.v1";
@@ -84,6 +96,26 @@ export function useDemo() {
   useEffect(() => {
     api.setTokenListener(() => setSession((s) => (s ? { ...s } : s)));
   }, []);
+
+  // ---------- recording (only with ?record, used by scripts/record-run.mjs) ----------
+  // Collects each finished capture and the panels as they stood, so the site can replay a real run
+  // when the backend is offline. Ids and display names only; never tokens.
+  useEffect(() => {
+    if (!session || typeof window === "undefined" || !new URLSearchParams(window.location.search).has("record")) return;
+    const w = window as unknown as { __vertexRecording?: Recording };
+    const prev = w.__vertexRecording;
+    w.__vertexRecording = {
+      recordedAt: prev?.recordedAt ?? new Date().toISOString(),
+      me: { userId: session.me.userId, displayName: session.me.displayName },
+      partner: { userId: session.partner.userId, displayName: session.partner.displayName },
+      steps: { ...prev?.steps, ...(capture && capture.state === "done" ? { [capture.kind]: capture } : {}) },
+      myFeed: myFeed ?? [],
+      myNotes: myNotes ?? [],
+      partnerNotes: (partnerNotes ?? []).map(({ at: _at, ...n }) => n), // eslint-disable-line @typescript-eslint/no-unused-vars
+      people: people ?? [],
+      names,
+    };
+  }, [session, capture, myFeed, myNotes, partnerNotes, people, names]);
 
   const track = useCallback(<T,>(t: Timed<T>) => {
     if (t.remaining !== null) setRemaining(t.remaining);

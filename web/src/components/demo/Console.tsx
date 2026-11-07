@@ -1,16 +1,19 @@
 "use client";
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { gsap } from "gsap";
 import { ease, prefersReducedMotion } from "@/engine";
 import { describe, StatusPanel, useHealth } from "../StatusPanel";
 import { Lanes } from "../Lanes";
-import { toLanes, ms } from "./capture";
-import { useDemo, type StepId } from "./useDemo";
+import { toLanes, ms, type Capture } from "./capture";
+import { useDemo, type Recording, type StepId } from "./useDemo";
+import recordingData from "@/data/recording.json";
 import { randomHandle } from "./seeded";
 import { site } from "@/data/site";
 import type { Notification } from "@/lib/api";
 
 const time = (iso: string | number) => new Date(iso).toISOString().slice(11, 19);
+const recording = recordingData as unknown as Recording;
+const recordedOn = new Date(recording.recordedAt).toISOString().slice(0, 16).replace("T", " ");
 
 function noteText(n: Notification, nameOf: (id: string) => string, subject: string) {
   const who = nameOf(n.latestActorId);
@@ -26,20 +29,28 @@ function noteText(n: Notification, nameOf: (id: string) => string, subject: stri
 export function Console() {
   const d = useDemo();
   const health = useHealth();
+  const [replaying, setReplaying] = useState(false);
+  const watch = () => {
+    setReplaying(true);
+    window.scrollTo({ top: 0 });
+  };
   if (!d.hydrated) return <div className="console" aria-busy="true" />;
-  if (!d.session) return <Start onStart={d.start} busy={d.busy === "start"} error={d.error} health={health} />;
-  return <Bench d={d} health={health} />;
+  if (replaying) return <Replay health={health} onExit={() => setReplaying(false)} />;
+  if (!d.session) return <Start onStart={d.start} onReplay={watch} busy={d.busy === "start"} error={d.error} health={health} />;
+  return <Bench d={d} health={health} onReplay={watch} />;
 }
 
 /* ---------------- start ---------------- */
 
 function Start({
   onStart,
+  onReplay,
   busy,
   error,
   health,
 }: {
   onStart: (name: string) => void;
+  onReplay: () => void;
   busy: boolean;
   error: string | null;
   health: ReturnType<typeof useHealth>;
@@ -87,9 +98,20 @@ function Start({
             </button>
           </div>
           {down && (
-            <p id="start-blocked" className="notice" role="status">
-              <strong>{text.title}.</strong> {text.body}
-            </p>
+            <div id="start-blocked" className="notice" role="status">
+              <p>
+                <strong>{text.title}.</strong> {text.body}
+              </p>
+              <p style={{ marginTop: "0.5rem" }}>
+                Meanwhile you can watch a run recorded against the real services on {recordedOn} UTC.
+              </p>
+              <button type="button" className="btn btn--small" style={{ marginTop: "0.75rem" }} onClick={onReplay}>
+                Watch the recorded run
+                <span className="btn__arrow" aria-hidden="true">
+                  →
+                </span>
+              </button>
+            </div>
           )}
           {error && (
             <p className="notice notice--fault" role="alert">
@@ -117,7 +139,7 @@ const STEPS: { id: StepId; title: (p: string) => string; body: (p: string) => st
   { id: "poison", title: () => "Send a record Notify can't read", body: () => "A malformed record should land in the dead-letter topic, not block the partition." },
 ];
 
-function Bench({ d, health }: { d: D; health: ReturnType<typeof useHealth> }) {
+function Bench({ d, health, onReplay }: { d: D; health: ReturnType<typeof useHealth>; onReplay: () => void }) {
   const { session } = d;
   const p = session!.partner.displayName.split(" ")[0];
   const current = STEPS.find((s) => !d.done.includes(s.id))?.id ?? null;
@@ -158,7 +180,11 @@ function Bench({ d, health }: { d: D; health: ReturnType<typeof useHealth> }) {
 
       {!healthy && health.state !== "loading" && (
         <p className="notice notice--fault" role="status">
-          <strong>{text.title}.</strong> {text.body}
+          <strong>{text.title}.</strong> {text.body}{" "}
+          <button type="button" className="link" onClick={onReplay}>
+            Watch the recorded run instead
+          </button>
+          .
         </p>
       )}
 
@@ -236,7 +262,7 @@ function Bench({ d, health }: { d: D; health: ReturnType<typeof useHealth> }) {
           )}
         </section>
 
-        <Scope d={d} />
+        <Scope capture={d.capture} />
 
         <section className="console__partner panel screen" aria-labelledby="partner-title">
           <div className="panel__head" style={{ borderColor: "var(--c-screen-line)" }}>
@@ -376,8 +402,7 @@ function NoteList({
 
 /* ---------------- the scope ---------------- */
 
-function Scope({ d }: { d: D }) {
-  const c = d.capture;
+function Scope({ capture: c, replay = false }: { capture: Capture | null; replay?: boolean }) {
   const view = useMemo(() => (c ? toLanes(c) : null), [c]);
   return (
     <section className="console__scope panel screen" aria-labelledby="scope-title">
@@ -386,14 +411,18 @@ function Scope({ d }: { d: D }) {
           {c ? `Capture: ${c.title}` : "Capture"}
         </h2>
         <span className="legend" aria-live="polite">
-          {c ? (c.state === "running" ? "recording" : c.state === "done" ? `${ms(view!.span / 1.04)} end to end` : c.state === "partial" ? "partial" : "failed") : "armed"}
+          {c ? (c.state === "running" ? (replay ? "replaying" : "recording") : c.state === "done" ? `${ms(view!.span / 1.04)} end to end` : c.state === "partial" ? "partial" : "failed") : "armed"}
         </span>
       </div>
       <div className="panel__body">
         {!c || !view ? (
           <div className="scope-empty">
             <p>No capture yet.</p>
-            <p>Run step 1 and each lane fills in from the timings Vertex returns.</p>
+            <p>
+              {replay
+                ? "Play step 1 and each lane fills in at the speed it did in the recorded run."
+                : "Run step 1 and each lane fills in from the timings Vertex returns."}
+            </p>
           </div>
         ) : (
           <>
@@ -427,5 +456,206 @@ function Scope({ d }: { d: D }) {
         )}
       </div>
     </section>
+  );
+}
+
+/* ---------------- the recorded run ---------------- */
+
+/** Plays a recorded capture back at its real speed: each lane appears when it ended in the run. */
+function useReplay() {
+  const [capture, setCapture] = useState<Capture | null>(null);
+  const [done, setDone] = useState<StepId[]>([]);
+  const [playing, setPlaying] = useState<StepId | null>(null);
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(() => () => timers.current.forEach(clearTimeout), []);
+
+  const play = (id: StepId) => {
+    const full = recording.steps[id];
+    if (!full) return;
+    timers.current.forEach(clearTimeout);
+    timers.current = [];
+    const finish = () => {
+      setCapture(full);
+      setPlaying(null);
+      setDone((d) => (d.includes(id) ? d : [...d, id]));
+    };
+    if (prefersReducedMotion()) return finish();
+    setPlaying(id);
+    setCapture({
+      ...full,
+      state: "running",
+      meta: [],
+      note: "Replaying the recorded capture at the speed it ran.",
+      hops: full.hops.map((h) => ({ ...h, start: null, end: null, mark: "waiting" })),
+    });
+    let last = 0;
+    full.hops.forEach((h, i) => {
+      if (h.end === null) return;
+      const at = Math.min(h.end, 6000);
+      last = Math.max(last, at);
+      timers.current.push(
+        setTimeout(() => setCapture((c) => (c ? { ...c, hops: c.hops.map((x, j) => (j === i ? full.hops[i] : x)) } : c)), at),
+      );
+    });
+    timers.current.push(setTimeout(finish, last + 250));
+  };
+  return { capture, done, playing, play };
+}
+
+function Replay({ health, onExit }: { health: ReturnType<typeof useHealth>; onExit: () => void }) {
+  const r = useReplay();
+  const { me, partner } = recording;
+  const p = partner.displayName.split(" ")[0];
+  const live = health.state === "ok" && health.data.status === "UP";
+  const current = STEPS.find((s) => !r.done.includes(s.id))?.id ?? null;
+  const nameOf = (id: string) =>
+    id === me.userId ? `${me.displayName} (you)` : id === partner.userId ? partner.displayName : (recording.names[id] ?? "Someone");
+
+  return (
+    <div className="console">
+      <div className="console__bar screen" role="region" aria-label="Recorded run">
+        <div className="console__bar-group">
+          <span className="console__bar-item">
+            <span className="dot dot--wait" aria-hidden="true" />
+            <b>Recorded run</b>
+          </span>
+          <span className="console__bar-item">
+            captured <b>{recordedOn} UTC</b>
+          </span>
+          <span className="console__bar-item">
+            you <b>{me.displayName}</b>
+          </span>
+          <span className="console__bar-item">
+            partner <b>{partner.displayName}</b>
+          </span>
+        </div>
+        <button type="button" className="btn btn--small btn--screen-ghost" onClick={onExit}>
+          {live ? "Start the live demo" : "Back"}
+        </button>
+      </div>
+
+      <p className="notice" role="status">
+        <strong>This is a recording, not the live system.</strong> The backend is offline right now, so this page
+        replays a run captured against the real services on {recordedOn} UTC. Every timing, offset and id below came
+        from that run; nothing is sent while you watch.
+        {live ? " The backend is back up, so you can start the live demo instead." : ""}
+      </p>
+
+      <div className="console__main">
+        <section className="console__steps panel" aria-labelledby="steps-title">
+          <div className="panel__head">
+            <h2 id="steps-title" className="panel__title">
+              What happened
+            </h2>
+            <span className="legend">
+              {r.done.length} of {STEPS.length}
+            </span>
+          </div>
+          <ol className="steps">
+            {STEPS.map((s, i) => {
+              const isDone = r.done.includes(s.id);
+              const isCurrent = s.id === current;
+              return (
+                <li key={s.id} className={`step${isDone ? " is-done" : ""}${isCurrent ? " is-current" : ""}`}>
+                  <span className="step__mark" aria-hidden="true">
+                    {isDone ? "✓" : i + 1}
+                  </span>
+                  <div>
+                    <h3 className="step__title">
+                      {s.title(p)}
+                      {isDone && <span className="sr-only"> (played)</span>}
+                    </h3>
+                    <p className="step__body">{s.body(p)}</p>
+                    <div className="step__actions">
+                      <button
+                        type="button"
+                        className={`btn btn--small${isCurrent ? "" : " btn--ghost"}`}
+                        onClick={() => r.play(s.id)}
+                        disabled={!!r.playing || !recording.steps[s.id]}
+                      >
+                        {r.playing === s.id ? "Replaying" : isDone ? "Play again" : "Play"}
+                      </button>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        </section>
+
+        <Scope capture={r.capture} replay />
+
+        <section className="console__partner panel screen" aria-labelledby="partner-title">
+          <div className="panel__head" style={{ borderColor: "var(--c-screen-line)" }}>
+            <h2 id="partner-title" className="panel__title">
+              {partner.displayName}&rsquo;s stream
+            </h2>
+            <span className="legend">at the end of the run</span>
+          </div>
+          <NoteList subject={p} notes={recording.partnerNotes} nameOf={nameOf} empty="Nothing arrived in this run." />
+        </section>
+      </div>
+
+      <div className="console__lower">
+        <section className="panel" aria-labelledby="feed-title">
+          <div className="panel__head">
+            <h2 id="feed-title" className="panel__title">
+              Your feed
+            </h2>
+            <span className="legend">as recorded</span>
+          </div>
+          {recording.myFeed.length === 0 ? (
+            <p className="empty">The feed was empty in this run.</p>
+          ) : (
+            <ul className="feed-list">
+              {recording.myFeed.map((post) => (
+                <li key={post.id}>
+                  <div className="post__who">
+                    <b>{nameOf(post.authorId)}</b>
+                    <span className="legend">{time(post.createdAt)} UTC</span>
+                  </div>
+                  <p className="post__text">{post.content}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section className="panel" aria-labelledby="notes-title">
+          <div className="panel__head">
+            <h2 id="notes-title" className="panel__title">
+              Your notifications
+            </h2>
+            <span className="legend">as recorded</span>
+          </div>
+          <NoteList subject="you" notes={recording.myNotes} nameOf={nameOf} empty="None arrived in this run." />
+        </section>
+
+        <section className="panel" aria-labelledby="people-title">
+          <div className="panel__head">
+            <h2 id="people-title" className="panel__title">
+              People to follow
+            </h2>
+            <span className="legend">from Recommend, as recorded</span>
+          </div>
+          {recording.people.length === 0 ? (
+            <p className="empty">Recommend had no suggestions in this run.</p>
+          ) : (
+            <ul className="people">
+              {recording.people.map((s) => (
+                <li key={s.userId}>
+                  <span>
+                    {nameOf(s.userId)}
+                    <span className="people__why">
+                      {s.reason === "POPULAR" ? "Popular: no friends in common yet" : `${s.mutualFriends} mutual friend${s.mutualFriends === 1 ? "" : "s"}`}
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
+    </div>
   );
 }
