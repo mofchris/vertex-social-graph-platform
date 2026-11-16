@@ -16,6 +16,13 @@
   --c-fault-screen: #ff8a85;
   --c-ok-screen: #9fe3b8;
   --c-curtain: var(--c-screen);
+  --c-raise: color-mix(in srgb, var(--c-bg) 60%, #fff);    /* panels lifted off the casing */
+  --c-raise-2: color-mix(in srgb, var(--c-bg) 50%, #fff);  /* notices */
+  --c-field: #fff;
+  --c-on-accent: #fff;
+  --c-ok: #1f8a4c;
+  --c-shine: color-mix(in srgb, var(--c-bg-2) 40%, #fff);
+  color-scheme: light;
 
   --f-display: var(--font-archivo), system-ui, sans-serif;
   --f-body: var(--font-archivo), system-ui, sans-serif;
@@ -39,6 +46,36 @@
   --z-curtain: 90;
 }
 
+/* Dark: the bench at night. The casing goes deep slate, the analyzer screens go darker than the
+   casing (with a fine edge so they still read as screens), and the signal blue lifts for contrast.
+   Set on <html> before first paint by the script in layout.tsx (stored choice, else the system). */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --c-bg: #0c1014;
+  --c-bg-2: #161c23;
+  --c-fg: #e4eaef;
+  --c-muted: #9ba7b3;
+  --c-line: #2b353f;
+  --c-screen: #05080b;
+  --c-screen-2: #10161c;
+  --c-screen-line: #24303a;
+  --c-screen-ink: #dfe7ee;
+  --c-screen-muted: #8f9daa;
+  --c-accent: #7d98ff;
+  --c-phosphor: #a8c0ff;
+  --c-fault: #ff7a74;
+  --c-fault-screen: #ff8a85;
+  --c-ok-screen: #9fe3b8;
+  --c-raise: #12181e;
+  --c-raise-2: #141b22;
+  --c-field: #090d11;
+  --c-on-accent: #05080b;
+  --c-ok: #5fd08f;
+  --c-shine: #232c35;
+}
+:root[data-theme="dark"] .screen:not(.footer):not(.trace-section) { box-shadow: inset 0 0 0 1px var(--c-screen-line); }
+:root[data-theme="dark"] .panel.screen { border-color: var(--c-screen-line); }
+
 /* ===================== FOUNDATION (engine) ===================== */
 *, *::before, *::after { box-sizing: border-box; }
 * { margin: 0; }
@@ -60,7 +97,7 @@ button { background: none; border: 0; cursor: pointer; }
 a { color: inherit; text-decoration: none; }
 h1, h2, h3, h4 { font-weight: inherit; font-size: inherit; text-wrap: balance; }
 p { text-wrap: pretty; }
-::selection { background: var(--c-accent); color: #fff; }
+::selection { background: var(--c-accent); color: var(--c-on-accent); }
 code, kbd, samp, .mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
 
 :focus-visible { outline: 2px solid var(--c-accent); outline-offset: 3px; border-radius: var(--radius); }
@@ -133,7 +170,7 @@ html.lenis, html.lenis body { height: auto; }
 
 /* Primary action: a signal-blue fill propagates under the label, then the arrow latches forward. */
 .btn {
-  --btn-bg: var(--c-fg); --btn-ink: var(--c-bg); --btn-fill: var(--c-accent); --btn-fill-ink: #fff;
+  --btn-bg: var(--c-fg); --btn-ink: var(--c-bg); --btn-fill: var(--c-accent); --btn-fill-ink: var(--c-on-accent);
   position: relative; isolation: isolate; overflow: hidden;
   display: inline-flex; align-items: center; gap: 0.75em; min-height: 3rem;
   padding: 0.85em 1.25em; border-radius: var(--radius);
@@ -366,7 +403,7 @@ html.lenis, html.lenis body { height: auto; }
   .console__lower { grid-template-columns: 1fr; }
 }
 
-.panel { border: 1px solid var(--c-line); border-radius: var(--radius); background: color-mix(in srgb, var(--c-bg) 60%, #fff); }
+.panel { border: 1px solid var(--c-line); border-radius: var(--radius); background: var(--c-raise); }
 .panel__head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; padding: 0.9rem 1rem; border-bottom: 1px solid var(--c-line); }
 .panel__title { font-weight: 600; font-size: var(--t-s); }
 .panel__body { padding: 1rem; }
@@ -415,7 +452,7 @@ html.lenis, html.lenis body { height: auto; }
 .composer__row { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
 
 .empty { padding: 1.5rem 1rem; color: var(--c-muted); font-size: var(--t-s); }
-.notice { padding: 0.85rem 1rem; border-radius: var(--radius); font-size: var(--t-s); line-height: 1.45; border: 1px solid var(--c-line); background: color-mix(in srgb, var(--c-bg) 50%, #fff); }
+.notice { padding: 0.85rem 1rem; border-radius: var(--radius); font-size: var(--t-s); line-height: 1.45; border: 1px solid var(--c-line); background: var(--c-raise-2); }
 .notice--fault { border-color: color-mix(in srgb, var(--c-fault) 50%, transparent); color: var(--c-fault); background: color-mix(in srgb, var(--c-fault) 6%, var(--c-bg)); }
 .screen .notice { background: var(--c-screen-2); border-color: var(--c-screen-line); color: var(--c-screen-ink); }
 
@@ -425,17 +462,25 @@ html.lenis, html.lenis body { height: auto; }
 .start__form { display: grid; gap: 0.5rem; max-width: 26rem; }
 .start__form label { font-size: var(--t-s); font-weight: 600; }
 .start__form input {
-  min-height: 3rem; padding: 0.7rem 0.85rem; border-radius: var(--radius); border: 1px solid var(--c-muted); background: #fff;
+  min-height: 3rem; padding: 0.7rem 0.85rem; border-radius: var(--radius); border: 1px solid var(--c-muted); background: var(--c-field);
 }
 .start__panel { grid-column: 8 / span 5; grid-row: 1 / span 2; align-self: center; }
 @media (max-width: 960px) {
   .start__title, .start__body, .start__panel { grid-column: 1 / -1; grid-row: auto; }
 }
 
-.skeleton { display: block; height: 0.8em; border-radius: var(--radius); background: linear-gradient(90deg, var(--c-bg-2), color-mix(in srgb, var(--c-bg-2) 40%, #fff), var(--c-bg-2)); background-size: 200% 100%; animation: shimmer 1.4s linear infinite; }
+.skeleton { display: block; height: 0.8em; border-radius: var(--radius); background: linear-gradient(90deg, var(--c-bg-2), var(--c-shine), var(--c-bg-2)); background-size: 200% 100%; animation: shimmer 1.4s linear infinite; }
 @keyframes shimmer { to { background-position: -200% 0; } }
 
 /* ===================== 404 ===================== */
 .lost { min-height: calc(100svh - var(--header-h)); display: grid; align-content: center; gap: 2rem; padding: 3rem var(--gutter); }
 .lost__title { font-size: var(--t-xl); max-width: 14ch; margin-left: -0.04em; }
 .lost .capture { max-width: 36rem; }
+
+/* Theme switch in the header */
+.theme-toggle { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--f-mono); font-size: var(--t-xs); letter-spacing: 0.04em; text-transform: uppercase; min-height: 2.25rem; padding: 0 0.25rem; color: var(--c-fg); }
+.theme-toggle__lamp { width: 0.8rem; height: 0.8rem; border-radius: 50%; border: 1.5px solid currentColor; background: linear-gradient(90deg, currentColor 50%, transparent 50%); transition: rotate 0.5s var(--ease-out, ease); }
+:root[data-theme="dark"] .theme-toggle__lamp { rotate: 180deg; }
+.theme-toggle:hover .theme-toggle__lamp { rotate: 90deg; }
+:root[data-theme="dark"] .theme-toggle:hover .theme-toggle__lamp { rotate: 270deg; }
+.theme-toggle:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }

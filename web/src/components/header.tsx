@@ -3,6 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { site } from "@/data/site";
 import { Mark } from "./Mark";
+import { ThemeToggle } from "./ThemeToggle";
 
 export function Header() {
   const path = usePathname();
@@ -23,6 +24,7 @@ export function Header() {
         <a className="nav__link" href={site.github} target="_blank" rel="noopener noreferrer">
           Code
         </a>
+        <ThemeToggle />
         <Link className="btn btn--small" href="/demo/" aria-current={onDemo ? "page" : undefined}>
           {onDemo ? "Live demo" : "Open the live demo"}
           <span className="btn__arrow" aria-hidden="true">

@@ -1,21 +1,23 @@
 // Portfolio screenshots from a running site and backend: 1440x900 at device scale 2, PNG + WebP.
 // Drives the real demo end to end, so every number on screen came from the services.
-//   node scripts/shoot-portfolio.mjs <out dir> [http://localhost:4400]
+//   node scripts/shoot-portfolio.mjs <out dir> [http://localhost:4400] [light|dark]
+// Files are named NN-name-<theme>.png/.webp.
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { chromium } from "playwright";
 import sharp from "sharp";
 
-const [outDir, base = "http://localhost:4400"] = process.argv.slice(2);
+const [outDir, base = "http://localhost:4400", theme = "light"] = process.argv.slice(2);
 if (!outDir) throw new Error("usage: node scripts/shoot-portfolio.mjs <out dir> [base url]");
 mkdirSync(outDir, { recursive: true });
 
 const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, colorScheme: "light" });
+const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, colorScheme: theme });
 page.on("pageerror", (e) => console.error("page error:", e.message));
 
 async function shot(name) {
   await page.waitForTimeout(400);
+  name = `${name}-${theme}`;
   const png = join(outDir, `${name}.png`);
   await page.screenshot({ path: png });
   await sharp(png).webp({ quality: 86 }).toFile(join(outDir, `${name}.webp`));

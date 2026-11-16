@@ -14,10 +14,16 @@ export const metadata: Metadata = {
   twitter: { card: "summary_large_image" },
 };
 
-export const viewport: Viewport = { themeColor: "#e8ecef" };
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#e8ecef" },
+    { media: "(prefers-color-scheme: dark)", color: "#0c1014" },
+  ],
+};
 
-// Runs before first paint: hidden-until-revealed styles only apply when JS and motion are on.
-const flags = `document.documentElement.classList.add('js');if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElement.classList.add('motion')`;
+// Runs before first paint: picks the theme (stored choice, else the system) so there is no flash,
+// and hidden-until-revealed styles only apply when JS and motion are on.
+const flags = `var d=document.documentElement,t;try{t=localStorage.getItem('vertex.theme')}catch(e){}if(t!=='light'&&t!=='dark')t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';d.dataset.theme=t;document.documentElement.classList.add('js');if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElement.classList.add('motion')`;
 
 const jsonLd = {
   "@context": "https://schema.org",

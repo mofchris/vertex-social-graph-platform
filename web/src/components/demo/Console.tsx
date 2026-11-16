@@ -317,7 +317,7 @@ function Bench({ d, health, onReplay }: { d: D; health: ReturnType<typeof useHea
               Your notifications
             </h2>
             <span className="legend">
-              <span className={`dot ${d.streams.me ? "dot--up" : "dot--wait"}`} aria-hidden="true" style={{ color: d.streams.me ? "#1f8a4c" : undefined }} />{" "}
+              <span className={`dot ${d.streams.me ? "dot--up" : "dot--wait"}`} aria-hidden="true" style={{ color: d.streams.me ? "var(--c-ok)" : undefined }} />{" "}
               {d.streams.me ? "live" : "connecting"}
             </span>
           </div>
