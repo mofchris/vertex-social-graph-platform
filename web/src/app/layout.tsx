@@ -1,44 +1,63 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Header } from "@/components/Header";
+import { Engine } from "@/engine/next";
+import { site } from "@/data/site";
+import { archivo, mono } from "./fonts";
 import "./globals.css";
-import { ThemeProvider } from "@/components/theme-provider";
-
-const geistSans = Geist({
-  variable: "--font-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
-  title: "Vertex — Distributed Social Graph & Identity Platform",
-  description:
-    "A scalable backend platform for user identity, social-graph relationships, and real-time interactions at the scale of millions of users.",
+  metadataBase: new URL(site.url),
+  title: { default: "Vertex | A social network you can trace", template: "%s | Vertex" },
+  description: site.description,
+  alternates: { canonical: "./" },
+  openGraph: { type: "website", siteName: site.name, images: ["/og.png"] },
+  twitter: { card: "summary_large_image" },
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#e8ecef" },
+    { media: "(prefers-color-scheme: dark)", color: "#0c1014" },
+  ],
+};
+
+// Runs before first paint: picks the theme (stored choice, else the system) so there is no flash,
+// and hidden-until-revealed styles only apply when JS and motion are on.
+const flags = `var d=document.documentElement,t;try{t=localStorage.getItem('vertex.theme')}catch(e){}if(t!=='light'&&t!=='dark')t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';d.dataset.theme=t;document.documentElement.classList.add('js');if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElement.classList.add('motion')`;
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareSourceCode",
+  name: "Vertex",
+  description: site.description,
+  codeRepository: site.github,
+  programmingLanguage: ["Java", "TypeScript"],
+  author: { "@type": "Person", name: site.author },
+  url: site.url,
+};
+
+export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html
-      lang="en"
-      suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col">
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="dark"
-          enableSystem
-          disableTransitionOnChange
-        >
+    <html lang="en" className={`${archivo.variable} ${mono.variable}`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: flags }} />
+      </head>
+      <body>
+        <a className="skip-link" href="#main">
+          Skip to content
+        </a>
+        <div id="curtain" aria-hidden="true">
+          <div className="curtain__panel" />
+        </div>
+        <Header />
+        <main id="main" tabIndex={-1}>
           {children}
-        </ThemeProvider>
+        </main>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }}
+        />
+        <Engine />
       </body>
     </html>
   );

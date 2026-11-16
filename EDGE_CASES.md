@@ -1,15 +1,35 @@
-# Edge Cases — Distributed Social Graph & Identity Platform
+# Edge cases
 
-A reference of the edge cases worth handling (and being able to talk about) for this
-project, grouped by service. Each entry has **what goes wrong** and a one-line
-**how you'd handle it**.
+The failure modes a social platform like Vertex has to survive, grouped by service. Each entry
+says **what goes wrong** and **how to handle it**.
 
-> You do not need to implement all of these. Pick a handful, handle them properly,
-> and be ready to explain them. A few done well beats every box checked.
+## Handled in this codebase
 
-## Highest-signal in interviews
+These are implemented and covered by tests:
 
-If you only prep a few, prep these — they're the ones a backend interviewer will dig into:
+1. **At-least-once delivery.** Notify dedupes on the event id in a ledger (`processed_events`),
+   so a redelivered or replayed event is counted, not notified twice.
+2. **Poison records.** A record Notify can't parse goes to `social.events.DLT` instead of
+   blocking its partition, and is stored with its error.
+3. **Dual write (database + broker).** Graph writes the relationship change and its event in one
+   transaction (transactional outbox); a relay publishes afterwards and retries until Kafka acks.
+4. **Celebrity fan-out.** Feed pushes posts to followers on write, but pulls accounts with more
+   than 20 followers at read time.
+5. **Supernodes in traversal.** Recommend caps how many friends it expands and samples each
+   friend's list.
+6. **Refresh-token replay.** Identity rotates refresh tokens and revokes the whole family when a
+   revoked one is presented again.
+7. **Brute force and noisy clients.** The gateway limits per IP and per user with token buckets
+   in Redis (one Lua script, Redis clock), with tighter buckets for sign-in and for writes, and
+   falls back to a local limiter if Redis is down.
+8. **Privacy behind a cache.** Profile caches the record but applies visibility when serving it,
+   so a cached copy is never shown to the wrong viewer.
+9. **Block wins.** A block removes follows and friendship both ways and is checked on reads.
+
+Everything below that list is a design note for growing past one machine (sharding, replicas,
+multi-region). It is not implemented here.
+
+## The ones that matter most at scale
 
 1. **Celebrity / supernode** fan-out and hot shards.
 2. **Symmetric relationships across shards** (where does a friendship/block edge live).
@@ -221,7 +241,7 @@ If you only prep a few, prep these — they're the ones a backend interviewer wi
 - **Zero-downtime schema migrations** — Rolling deploys run old and new code simultaneously, so
   a dropped/renamed column breaks the old pods. *Handle:* expand/contract — add column, write
   both, backfill, remove later.
-- **gRPC contract compatibility** — Service contracts change while two versions coexist during
+- **API contract compatibility** — Service contracts change while two versions coexist during
   a deploy. *Handle:* additive, backward-compatible changes only; never break a field in one
   release.
 - **Global clock assumptions** — There's no single clock across services; anything time-based

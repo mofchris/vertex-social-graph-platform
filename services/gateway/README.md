@@ -42,23 +42,39 @@ metrics probes. Everything else requires a valid token.
 
 ## Rate limiting
 
-A **token bucket** (burst up to `capacity`, then paced to `refill-per-second`) runs at the very
-front of the chain — *before* authentication — so it also shields the public login/signup endpoints
-from brute force. Two buckets are checked (EDGE_CASES.md: combine per-account and per-IP):
+Token buckets (burst up to a capacity, then paced to a refill rate) run at the very front of the
+chain, before authentication, so they also shield the public sign-in endpoints. Buckets checked:
 
-- **per-IP** always — bounds anonymous traffic; and
-- **per-user** when the request carries a valid token — so one heavy account can't drain a shared
-  NAT/CGNAT's IP budget for everyone behind it, and is still bounded on its own.
+| Bucket | Key | Default |
+|---|---|---|
+| auth | client IP, `/api/identity/v1/auth/**` only | 10, then 1 every 5 s |
+| general | client IP, always | 100, then 50/s |
+| general | user, when the token is valid | 100, then 50/s |
+| lab | user, `POST /api/graph/v1/events/**` (replay, poison) | 6, then 3 a minute |
+| writes | user, POST/PUT/PATCH/DELETE | 30, then 1 every 2 s |
 
-Either bucket being empty returns `429 Too Many Requests` with a `Retry-After`. The decision is an
-**atomic Redis Lua script** (`scripts/token_bucket.lua`), so the read-modify-write can't race across
-gateway instances and there's no fixed-window boundary burst. If **Redis is unreachable** the
-limiter degrades to a per-instance in-memory bucket rather than failing requests — a limiter-store
-outage stays an outage of *sharing*, not of the gateway (EDGE_CASES.md: "limiter store down").
+Any empty bucket returns `429` with `Retry-After`; allowed responses carry
+`X-RateLimit-Remaining` (the tightest bucket that applied). Each decision is one **atomic Redis Lua
+script** (`scripts/token_bucket.lua`) that reads the Redis server clock, so instances with skewed
+clocks agree. If Redis is unreachable the limiter degrades to a per-instance in-memory bucket
+rather than failing requests. Off-Redis by default; the distributed path runs under the `redis`
+profile. All limits are `app.ratelimit.*` / environment overridable.
 
-Off-Redis by default (in-process limiter, no dependency); the distributed path activates under the
-`redis` profile (`SPRING_PROFILES_ACTIVE=redis`). Tunable via `app.ratelimit.{enabled,capacity,
-refill-per-second}`.
+**Client IP.** Behind a tunnel every request arrives from the same peer, so per-IP limits would be
+shared by everyone. `app.gateway.client-ip-header` (env `CLIENT_IP_HEADER`) names a header set by a
+trusted edge; production uses `X-Vertex-Client-IP`, set by the Cloudflare Worker. Values that are
+not IP literals are ignored.
+
+## Streaming, status and timing
+
+- Responses are streamed, not buffered, so Notify's Server-Sent Events pass through; requests that
+  accept `text/event-stream` use a client with no read timeout. Virtual threads keep long-lived
+  streams cheap.
+- `GET /api/status` (public) asks every routed service for its own health and reports status and
+  latency per service, cached for 5 s and computed single-flight.
+- Every proxied response carries `Server-Timing: gateway;dur=…, upstream;desc="<service>";dur=…`.
+- `app.gateway.blocked-paths` are refused with 404 before forwarding: each service's actuator and
+  Notify's raw `POST /v1/events`.
 
 ## Run it
 

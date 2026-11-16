@@ -1,0 +1,11 @@
+[Unit]
+Description=Reset the Vertex demo data to its seeded state
+Requires=docker.service
+After=vertex.service
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/opt/vertex
+ExecStart=/opt/vertex/deploy/reset-demo.sh
+TimeoutStartSec=1200

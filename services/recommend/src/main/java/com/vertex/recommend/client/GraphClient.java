@@ -11,12 +11,14 @@ import org.springframework.web.client.RestClientException;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
- * Reads the friend graph from the Graph service for friends-of-friends recommendations.
- * The user's token is forwarded (token propagation). Calls degrade gracefully: empty lists
- * on error, and eligibility fails closed (an unverifiable candidate is not recommended).
+ * Reads the friend graph from the Graph service for friends-of-friends recommendations, and
+ * the popular-users list used as the cold-start fallback. The user's token is forwarded
+ * (token propagation). Calls degrade gracefully: empty lists on error, and eligibility fails
+ * closed (an unverifiable candidate is not recommended).
  */
 @Component
 public class GraphClient {
@@ -74,6 +76,49 @@ public class GraphClient {
         }
     }
 
+    /**
+     * Stricter eligibility for popular (non-FoF) suggestions: no block either way, not already
+     * friends or with a friend request in flight, and not already followed. A popular user the
+     * caller already follows isn't a useful "you may know". Fails closed.
+     */
+    public boolean isUnconnected(UUID candidate, String authorizationHeader) {
+        try {
+            Relationship rel = restClient.get()
+                    .uri("/v1/relationship/{id}", candidate)
+                    .header(HttpHeaders.AUTHORIZATION, authorizationHeader)
+                    .retrieve()
+                    .body(Relationship.class);
+            if (rel == null) {
+                return false;
+            }
+            return !rel.blocking() && !rel.blockedBy() && !rel.following()
+                    && (rel.friendStatus() == null || "NONE".equals(rel.friendStatus()));
+        } catch (RestClientException e) {
+            log.warn("graph relationship failed for {}: {}", candidate, e.getMessage());
+            return false; // fail closed
+        }
+    }
+
+    /**
+     * The most-followed users, most first, as seen by the bearer (Graph already excludes the
+     * caller and anyone in a block relationship with them). Unlike the other reads this
+     * throws on failure, so the caller decides how to degrade.
+     */
+    public List<UUID> popular(String authorizationHeader, int limit) {
+        PopularPage page = restClient.get()
+                .uri("/v1/popular?limit={limit}", Math.clamp(limit, 1, 100))
+                .header(HttpHeaders.AUTHORIZATION, authorizationHeader)
+                .retrieve()
+                .body(PopularPage.class);
+        if (page == null || page.items() == null) {
+            return List.of();
+        }
+        return page.items().stream()
+                .map(PopularUser::userId)
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
     private UserPage getPage(String uri, UUID userId, String authorizationHeader) {
         try {
             return restClient.get()
@@ -92,6 +137,14 @@ public class GraphClient {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record Relationship(String friendStatus, boolean blocking, boolean blockedBy) {
+    private record Relationship(String friendStatus, boolean following, boolean blocking, boolean blockedBy) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record PopularPage(List<PopularUser> items) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record PopularUser(UUID userId, long followers) {
     }
 }

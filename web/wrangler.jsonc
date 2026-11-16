@@ -1,0 +1,23 @@
+// Cloudflare Worker for the Vertex site: static assets from `next build` (out/) plus the /api proxy
+// in worker/index.ts. Deploy with `npm run deploy` (builds first). Free plan; no paid features.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "vertex",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": {
+    "directory": "./out",
+    "binding": "ASSETS",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page",
+    // /api/* must reach the Worker even though no asset matches.
+    "run_worker_first": ["/api/*"]
+  },
+  // Private route to the gateway: a Workers VPC service bound to the `vertex` Cloudflare Tunnel.
+  // The tunnel connector (cloudflared) runs beside the gateway on the VM; see deploy/.
+  "vpc_services": [{ "binding": "GATEWAY", "service_id": "01a1b3d2-fd66-75b1-82f7-48487d51ea06" }],
+  "vars": { "GATEWAY_ORIGIN": "http://172.30.0.10:8088" },
+  "observability": { "enabled": true }
+}

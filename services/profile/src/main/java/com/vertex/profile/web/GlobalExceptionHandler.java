@@ -1,5 +1,6 @@
 package com.vertex.profile.web;
 
+import com.vertex.profile.exception.InvalidRequestException;
 import com.vertex.profile.exception.ProfileNotFoundException;
 import com.vertex.profile.web.dto.ErrorResponse;
 import org.springframework.http.HttpStatus;
@@ -23,6 +24,14 @@ public class GlobalExceptionHandler {
         }
         ErrorResponse body = new ErrorResponse(
                 HttpStatus.BAD_REQUEST.value(), "validation_failed", "request validation failed", fieldErrors);
+        return ResponseEntity.badRequest().body(body);
+    }
+
+    @ExceptionHandler(InvalidRequestException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidRequest(InvalidRequestException ex) {
+        ErrorResponse body = new ErrorResponse(
+                HttpStatus.BAD_REQUEST.value(), "validation_failed", "request validation failed",
+                Map.of(ex.getField(), ex.getMessage()));
         return ResponseEntity.badRequest().body(body);
     }
 

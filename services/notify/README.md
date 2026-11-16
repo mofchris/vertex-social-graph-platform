@@ -39,15 +39,24 @@ makes the record redeliver, and a rebalance can replay a partition. So the consu
 - **Idempotent consumer** — every event carries a unique `eventId`. The consumer records it in a
   `processed_events` ledger **in the same transaction** as the notification it produces; a
   redelivered event finds its id already there and is skipped, so 1,000 redeliveries never become
-  1,000 notifications or double-bump a coalesced count.
+  1,000 notifications or double-bump a coalesced count. The ledger also records where each event
+  was read from (partition, offset), who it concerns, and how many redeliveries it ignored
+  (`duplicates_ignored`, bumped by one atomic SQL `UPDATE`, plus `last_duplicate_at`).
 - **Dead-letter queue** — a record the consumer can't parse is left to throw; a `DefaultErrorHandler`
   retries twice for a transient fault, then republishes it to `social.events.DLT` instead of
   crash-looping the partition and starving every other recipient. A record whose *type* we don't
-  model yet is dropped quietly (forward-compatible), not dead-lettered.
+  model yet is dropped quietly (forward-compatible), not dead-lettered; one that parses but has no
+  `eventId`/`recipientId`/`actorId` is dead-lettered without retries.
+- **Dead-letter capture** — a second listener (own group, `notify-dlt-capture`) reads
+  `social.events.DLT` and stores each record in `dead_letters` with the error and original
+  topic/partition/offset from Spring Kafka's `kafka_dlt-*` headers (payload truncated to 500
+  chars). It swallows every failure so it can never become a poison pill itself; the original
+  coordinates are unique, so a redelivered DLT record is stored once.
 - **Bounded ledger** — a scheduled purge drops ledger rows past a retention window longer than any
-  realistic redelivery (default 7 days), so the dedupe table can't grow without bound.
+  realistic redelivery (default 7 days), so the dedupe table can't grow without bound. Captured
+  dead letters get the same retention.
 
-Off by default: the consumer, DLQ handler, and purge are all `@Profile("kafka")`. Activate with
+Off by default: the consumer, DLQ handler, DLT capture, and purge are all `@Profile("kafka")`. Activate with
 `SPRING_PROFILES_ACTIVE=kafka` (or `postgres,kafka`). The repo-root `docker-compose.yml` boots
 Graph → Kafka → Notify end-to-end.
 
@@ -55,8 +64,11 @@ Graph → Kafka → Notify end-to-end.
 
 `GET /v1/notifications/stream` returns a **Server-Sent Events** stream. When an event is
 ingested for a user, the resulting (coalesced) notification is pushed to their open streams
-immediately. Dead streams are removed on completion/timeout/error, so reconnects don't leak
-emitters. Single-node here; a multi-instance deployment would fan out through a shared pub/sub.
+once the transaction commits (a rolled-back write is never pushed). Every 25s
+(`SSE_HEARTBEAT_MS`) each open stream gets a `:ping` comment so proxies that cut idle
+connections (Cloudflare, ~100s) keep it open. Dead streams are removed on completion/timeout/error
+or a failed heartbeat, so reconnects don't leak emitters. Single-node here; a multi-instance
+deployment would fan out through a shared pub/sub.
 
 ## Run it
 
@@ -77,10 +89,35 @@ All endpoints require `Authorization: Bearer <token>`.
 | GET    | `/v1/notifications/unread-count`  | `{ "unread": N }`                                  |
 | POST   | `/v1/notifications/read`          | Mark all the caller's notifications read (204)     |
 | GET    | `/v1/notifications/stream`        | Real-time SSE stream of the caller's notifications |
+| GET    | `/v1/pipeline/events/{eventId}`   | How the consumer handled an event you sent or received |
+| GET    | `/v1/pipeline/dead-letters/mine?limit=` | Dead letters keyed by your id, newest first (default 10, max 50) |
+| GET    | `/v1/pipeline/stats`              | System-wide `{ processedEvents, duplicatesIgnored, deadLetters }` |
 
 `POST /v1/events` body: `{ "recipientId": "...", "type": "FOLLOW", "targetId": "..." }`.
 Types: `FOLLOW`, `FRIEND_REQUEST`, `FRIEND_ACCEPT`, `POST_LIKE`, `MENTION`. `targetId` is
 optional (null = "about you"). Observability: `GET /actuator/health`, `/actuator/prometheus`.
+
+### Pipeline trace
+
+`GET /v1/pipeline/events/{eventId}` returns `404` until the consumer has processed the event, and
+also when you are neither its actor nor its recipient (indistinguishable on purpose):
+
+```json
+{
+  "eventId": "...",
+  "type": "FOLLOW",
+  "processedAt": "...",
+  "partition": 0,
+  "offset": 41,
+  "duplicatesIgnored": 1,       // redeliveries of this eventId that were ignored
+  "lastDuplicateAt": "..."      // null until the first duplicate
+}
+```
+
+`GET /v1/pipeline/dead-letters/mine` returns `{ "items": [ { "id", "error", "payloadPreview",
+"originalTopic", "originalPartition", "originalOffset", "receivedAt" } ] }` for records whose Kafka
+key is your user id (Graph keys a deliberate poison message by its sender). `/v1/pipeline/stats` is
+real counts over the ledger and `dead_letters`, so it shrinks when the retention purge runs.
 
 ### Example
 
@@ -101,13 +138,14 @@ curl -s localhost:8084/v1/notifications -H "Authorization: Bearer <recipient-tok
 
 ```
 src/main/java/com/vertex/notify/
-├── config/      JwtProperties, SecurityConfig
-├── domain/      Notification, NotificationType
-├── repository/  NotificationRepository
+├── config/      JwtProperties, SecurityConfig, NotifyKafkaConfig, SchedulingConfig
+├── domain/      Notification, NotificationType, ProcessedEvent, DeadLetter
+├── events/      SocialEventConsumer, DeadLetterCapture, ProcessedEventPurge
+├── repository/  Notification/ProcessedEvent/DeadLetter repositories
 ├── security/    JwtService (verify-only), JwtAuthenticationFilter
-├── service/     NotificationService (coalescing), SseEmitters (real-time)
-├── web/         NotificationController, DTOs, error handling
+├── service/     NotificationService (coalescing), SseEmitters (real-time), PipelineService (trace)
+├── web/         NotificationController, PipelineController, DTOs, error handling
 src/main/resources/
 ├── application.yml
-└── db/migration/V1__init_notify.sql
+└── db/migration/V1__init_notify.sql, V2__processed_events.sql, V3__pipeline_trace.sql
 ```

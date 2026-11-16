@@ -2,6 +2,7 @@ package com.vertex.notify.events;
 
 import com.vertex.notify.domain.NotificationType;
 import com.vertex.notify.service.NotificationService;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Profile;
@@ -35,10 +36,15 @@ public class SocialEventConsumer {
     }
 
     @KafkaListener(topics = "social.events", groupId = "notify")
-    public void onSocialEvent(String payload) {
+    public void onSocialEvent(ConsumerRecord<String, String> record) {
         // A parse failure throws on purpose: the dead-letter error handler routes the poison record
         // to social.events.DLT rather than letting it crash-loop the partition.
-        IncomingSocialEvent event = JSON.readValue(payload, IncomingSocialEvent.class);
+        IncomingSocialEvent event = JSON.readValue(record.value(), IncomingSocialEvent.class);
+
+        if (event.eventId() == null || event.recipientId() == null || event.actorId() == null) {
+            // Parseable but not an event: can never succeed, so it is dead-lettered without retries.
+            throw new MalformedEventException("social event is missing eventId, recipientId or actorId");
+        }
 
         NotificationType type = mapType(event.type());
         if (type == null) {
@@ -46,7 +52,10 @@ public class SocialEventConsumer {
             return; // forward-compatible: an event kind we don't model yet is not a failure
         }
 
-        notifications.ingestEvent(event.eventId(), event.recipientId(), type, event.targetId(), event.actorId());
+        // Hand over where the record came from so the ledger can say "consumed from partition P
+        // offset O" — the system trace shows that to the visitor whose action produced it.
+        notifications.ingestEvent(event.eventId(), event.recipientId(), type, event.targetId(), event.actorId(),
+                record.partition(), record.offset());
     }
 
     /** Map Graph's event vocabulary onto Notify's; unknown kinds return null and are dropped. */

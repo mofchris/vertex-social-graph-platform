@@ -38,6 +38,9 @@ app:
   notify:
     # Server-Sent Events stream timeout (ms). Clients reconnect when it elapses.
     sse-timeout-ms: ${SSE_TIMEOUT_MS:1800000}
+    # Heartbeat (an SSE ":ping" comment) on every open stream, so proxies that drop idle
+    # connections (Cloudflare: ~100s) never see one go quiet.
+    sse-heartbeat-ms: ${SSE_HEARTBEAT_MS:25000}
 
 ---
 spring:

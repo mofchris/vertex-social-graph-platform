@@ -20,13 +20,13 @@ public class RateLimitConfig {
 
     @Bean
     @Profile("redis")
-    RateLimiter redisRateLimiter(StringRedisTemplate redis, RateLimitProperties props) {
-        return new RedisRateLimiter(redis, props, new LocalRateLimiter(props));
+    RateLimiter redisRateLimiter(StringRedisTemplate redis) {
+        return new RedisRateLimiter(redis, new LocalRateLimiter());
     }
 
     @Bean
     @Profile("!redis")
-    RateLimiter localRateLimiter(RateLimitProperties props) {
-        return new LocalRateLimiter(props);
+    RateLimiter localRateLimiter() {
+        return new LocalRateLimiter();
     }
 }

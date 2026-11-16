@@ -1,118 +1,109 @@
-# Vertex — Distributed Social Graph & Identity Platform
+# Vertex
 
 [![CI](https://github.com/mofchris/vertex-social-graph-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/mofchris/vertex-social-graph-platform/actions/workflows/ci.yml)
 
-A scalable backend platform that manages user **identities**, **relationships**, and
-**real-time social interactions** for millions of users — built as a microservices system
-to demonstrate distributed-systems design, caching strategy, cloud-native deployment, and
-operating services reliably at scale.
+**A social network built as seven Java services on Postgres, Redis and Kafka, running live, with a
+demo that shows you what each action did inside it.**
 
-> Vertex is the product name for this platform. The repo includes a polished frontend
-> showcase plus the full systems-design documentation behind it.
+**Live: [vertex.mofchris.workers.dev](https://vertex.mofchris.workers.dev)** · open **Live demo** and
+press **Start the demo**. No sign-up: it creates a throwaway account and pairs you with one of 80
+seeded people, so you can watch both ends of every event. Data resets daily at 04:00 UTC.
 
----
+Prefer a fixed account? Every seeded person signs in with the password `vertex-demo`, for example
+`avery.okafor@vertex.demo`.
 
-## Why this exists
+## What you can do in the demo
 
-This project is a focused study in backend engineering at scale: identity and auth, a
-sharded social graph, hybrid feed fan-out, Redis caching, a Kafka event pipeline, and the
-observability and reliability patterns that keep it all running. The
-[edge cases](./EDGE_CASES.md) doc captures the failure modes a real system has to handle.
-
-## Repository structure
-
-```
-.
-├── web/                Next.js + TypeScript + Tailwind frontend showcase (live)
-├── PROJECT.md          Full stack, architecture, and feature breakdown
-├── EDGE_CASES.md       Edge cases by service (interview-grade reference)
-├── docker-compose.yml  One-command full stack (Postgres + Redis + Kafka + every service)
-└── services/           Backend microservices
-```
-
-## Tech stack
-
-- **Backend:** Java (Spring Boot) + Python (FastAPI), gRPC internal / REST public
-- **Data:** PostgreSQL (sharded), Redis (cache, sessions, rate limiting), Apache Kafka
-- **Infra:** Docker, Kubernetes, AWS/GCP, Terraform, GitHub Actions
-- **Observability:** Prometheus, Grafana, OpenTelemetry
-- **Frontend:** Next.js 16, React 19, TypeScript, Tailwind CSS v4, shadcn/ui
-
-See [PROJECT.md](./PROJECT.md) for the complete breakdown.
+1. **Follow your partner** and watch the event cross the gateway, Graph's transactional outbox,
+   a Kafka partition and Notify's idempotent consumer, then arrive on their screen over SSE. Every
+   lane is drawn from real timings: your round trip, the gateway's `Server-Timing`, outbox
+   timestamps, the partition and offset Notify consumed it from.
+2. **Have them follow you back**, and see your own notification arrive live.
+3. **Post**, and see Feed write it into your follower's timeline (fan-out on write).
+4. **Replay your follow event** with the same id: Kafka delivers it again, Notify's ledger counts
+   the duplicate, and nobody is notified twice.
+5. **Send a record Notify can't parse**: it lands on the dead-letter topic with its error, and the
+   partition keeps flowing.
 
 ## Architecture
 
-```
-Clients → API Gateway → Microservices → PostgreSQL / Redis / Kafka
-                         (Identity · Profile · Graph · Feed · Recommend · Notify)
+```mermaid
+flowchart LR
+  B[Browser] -->|HTTPS| W[Cloudflare Worker<br/>site + /api proxy]
+  W -->|Workers VPC + Tunnel| G[Gateway<br/>JWT, rate limits]
+  G --> I[Identity]
+  G --> P[Profile]
+  G --> GR[Graph]
+  G --> F[Feed]
+  G --> N[Notify]
+  G --> R[Recommend]
+  P -->|friends check| GR
+  F -->|followers| GR
+  R -->|graph traversal| GR
+  GR -- outbox relay --> K[(Kafka<br/>social.events)]
+  K --> N
+  N -. poison .-> DLT[(social.events.DLT)]
+  N -->|SSE| B
+  G --- RD[(Redis)]
+  P --- RD
+  I & P & GR & F & N --- PG[(Postgres<br/>one DB per service)]
 ```
 
-Stateless services scale independently behind a gateway, talk over gRPC for synchronous
-calls and Kafka for asynchronous events, and degrade gracefully under load.
+| Service | Port | Owns |
+|---|---|---|
+| [Gateway](./services/gateway) | 8088 | The only way in: routing, JWT at the edge, token buckets in Redis (per IP, per user, sign-in, writes), streamed SSE, `/api/status` |
+| [Identity](./services/identity) | 8080 | Sign-up, sign-in, 15-minute access tokens, refresh rotation with reuse detection |
+| [Profile](./services/profile) | 8081 | Profiles behind a Redis read-through cache; privacy applied at serve time |
+| [Graph](./services/graph) | 8082 | Follows, friendships, blocks; transactional outbox to Kafka |
+| [Feed](./services/feed) | 8083 | Posts and timelines; push on write, pull for accounts over 20 followers |
+| [Notify](./services/notify) | 8084 | Idempotent Kafka consumer, dead-letter topic, coalescing, SSE |
+| [Recommend](./services/recommend) | 8085 | Friends of friends with supernode caps, popular fallback for new users |
 
-## Run the frontend
+Each service owns its database and schema (Flyway). Design notes: [PROJECT.md](./PROJECT.md).
+Failure modes and which ones the code handles: [EDGE_CASES.md](./EDGE_CASES.md).
+
+## Run it locally
+
+Needs Docker. One command builds the services, starts Postgres, Redis and Kafka, waits for every
+health check and seeds the 80 demo people:
 
 ```bash
-cd web
-npm install
-npm run dev
-# http://localhost:3000
+docker compose up -d --build
 ```
 
-Routes: `/` (landing), `/login` (sign in), `/signup` (create account).
-
-## Run the whole platform
-
-One command boots Postgres, Redis, a single-node Kafka (KRaft), and every service:
+The first build takes about ten minutes; after that the stack starts in about a minute. Then:
 
 ```bash
-docker compose up --build
-# gateway :8088 (front door) — identity :8080 · profile :8081 · graph :8082 ·
-#   feed :8083 · notify :8084 · recommend :8085
-bash scripts/seed-demo.sh   # populate ~80 users once everything is healthy
+cd web && npm install && npm run dev     # http://localhost:3000, /api proxied to the gateway on :8088
 ```
 
-Clients go through the **gateway** on `:8088` (e.g. `POST /api/identity/v1/auth/login`,
-`GET /api/graph/v1/relationship/{id}`); the individual service ports stay exposed for the demo
-seed and local debugging.
+Tests: `cd services/<name> && ./mvnw test` (Testcontainers needs Docker), and
+`cd web && npm run build && npm run lint`.
 
-Graph and Notify run the `kafka` profile here, so a follow/friend event flows
-**Graph → (transactional outbox) → Kafka `social.events` → Notify (idempotent consumer)**.
-Each service can also run standalone on embedded H2 with just a JDK (`cd services/<name> &&
-./mvnw spring-boot:run`).
+## How it's hosted for free
 
-## Status
+| Piece | Where | Cost |
+|---|---|---|
+| Whole backend (7 services, Postgres, Redis, Kafka) | The owner's Windows PC: Docker Compose under WSL 2, started with Windows by systemd | Free |
+| Network path to it | Cloudflare Tunnel: an outbound-only connector, no open ports, no home IP exposed | Free |
+| Site and `/api` proxy | Cloudflare Worker with static assets, reaching the tunnel through Workers VPC | Free plan |
+| When the PC is off | The demo offers a run recorded against the real services, clearly labelled as a recording | Free |
 
-- ✅ Frontend showcase — landing, architecture overview, auth pages
-- ✅ Systems-design docs — `PROJECT.md`, `EDGE_CASES.md`
-- ✅ **Identity service** (`services/identity`) — signup/login, JWT access tokens,
-  refresh-token rotation with reuse detection; runs on embedded H2 or Postgres. See
-  [its README](./services/identity/README.md).
-- ✅ **Profile service** (`services/profile`) — profile CRUD, **Redis read-through cache**
-  with serve-time privacy (public/friends/private); verifies Identity's JWTs and calls the
-  Graph service (token propagation) for `FRIENDS` visibility. Runs on embedded H2 +
-  in-process cache, or Postgres + Redis. See [its README](./services/profile/README.md).
-- ✅ **Graph service** (`services/graph`) — the social graph: follows, friend requests
-  (state machine, crossing-request auto-accept), blocks (block-wins), relationship/counts,
-  cursor-paginated friends/followers/following. Publishes relationship events via a
-  **transactional outbox** → Kafka. See [its README](./services/graph/README.md).
-- ✅ **Feed service** (`services/feed`) — posts + home timelines with **hybrid fan-out**
-  (on-write for normal authors, on-read for celebrities); calls Graph for the follow graph.
-  See [its README](./services/feed/README.md).
-- ✅ **Notify service** (`services/notify`) — notifications with **coalescing** (1,000 likes →
-  one "X and N others") and **real-time** delivery over Server-Sent Events. Consumes Graph's
-  Kafka events with an **idempotent consumer** (dedupe ledger) and a **dead-letter queue**. See
-  [its README](./services/notify/README.md).
-- ✅ **Recommend service** (`services/recommend`) — "people you may know" via
-  friends-of-friends traversal with supernode caps and eligibility filtering; stateless,
-  computed live from Graph. See [its README](./services/recommend/README.md).
-- ✅ **Gateway service** (`services/gateway`) — the single front door: reverse-proxy **routing**
-  to every service, **edge JWT verification**, and a **token-bucket rate limiter** (atomic Redis
-  Lua, per-IP + per-user, with a local fallback). See [its README](./services/gateway/README.md).
+The site is always up; the live demo is live while that PC is on. Measured on the running stack:
+about 3 GB of memory in use, CPU near idle between requests. The Workers free plan allows 100,000
+requests a day.
 
-## Demo data
+The production setup lives in [`deploy/`](./deploy): the compose overlay (nothing published,
+secrets from `deploy/.env`, the tunnel connector), systemd units for start-on-boot and the nightly
+reset, and a bootstrap script that sets up either a Windows PC under WSL 2 or a Linux VM (an
+Oracle Cloud Always Free ARM VM fits it). [`deploy/README.md`](./deploy/README.md) covers both,
+plus redeploying and re-recording the offline run.
 
-[`scripts/seed-demo.sh`](./scripts/seed-demo.sh) populates the whole platform with ~80
-users — profiles, a follow graph with a few celebrities, friendships, and posts — by driving
-the live APIs. Start the four services (each `cd services/<name> && ./mvnw spring-boot:run`),
-then run `bash scripts/seed-demo.sh`. It's re-runnable (logs in if a user already exists).
+## Repository layout
+
+```
+services/   seven Spring Boot services, each with its own README, Dockerfile and tests
+web/        the site and demo (Next.js static export) and the Cloudflare Worker
+deploy/     production overlay, systemd units, reset and bootstrap scripts
+scripts/    Postgres init, demo seed
+```

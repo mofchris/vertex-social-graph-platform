@@ -5,6 +5,11 @@ server:
 spring:
   application:
     name: gateway
+  threads:
+    # Each proxied request holds a thread for its whole duration, and a notification stream (SSE)
+    # can stay open for many minutes. Virtual threads make that cheap.
+    virtual:
+      enabled: true
 
 management:
   endpoints:
@@ -22,11 +27,20 @@ management:
 
 app:
   ratelimit:
-    # Token bucket: burst up to `capacity`, then paced to `refill-per-second`. Applied per-IP and
-    # (when authenticated) per-user. Generous defaults; tune per deployment.
+    # Token buckets: burst up to `capacity`, then paced to `refill-per-second`.
     enabled: ${RATELIMIT_ENABLED:true}
+    # Every request, per client IP and (when signed in) per user.
     capacity: ${RATELIMIT_CAPACITY:100}
     refill-per-second: ${RATELIMIT_REFILL_PER_SECOND:50}
+    # Login / signup / refresh, per client IP: 10 at once, then one every 5 seconds.
+    auth-capacity: ${RATELIMIT_AUTH_CAPACITY:10}
+    auth-refill-per-second: ${RATELIMIT_AUTH_REFILL_PER_SECOND:0.2}
+    # POST / PUT / PATCH / DELETE, per user: 30 at once, then one every 2 seconds.
+    write-capacity: ${RATELIMIT_WRITE_CAPACITY:30}
+    write-refill-per-second: ${RATELIMIT_WRITE_REFILL_PER_SECOND:0.5}
+    # Replaying events / sending poison records, per user: 6 at once, then 3 a minute.
+    lab-capacity: ${RATELIMIT_LAB_CAPACITY:6}
+    lab-refill-per-second: ${RATELIMIT_LAB_REFILL_PER_SECOND:0.05}
   jwt:
     # MUST match the Identity service's secret so the gateway can verify its tokens.
     secret: ${APP_JWT_SECRET:dev-only-secret-change-me-please-min-32-bytes-long-0123456789}
@@ -41,6 +55,15 @@ app:
       feed: ${FEED_BASE_URL:http://localhost:8083}
       notify: ${NOTIFY_BASE_URL:http://localhost:8084}
       recommend: ${RECOMMEND_BASE_URL:http://localhost:8085}
+    # Never forwarded from outside: each service's actuator (metrics, health details) and Notify's
+    # raw event-ingest endpoint, which would let any signed-in user notify anyone about anything.
+    blocked-paths:
+      - /api/*/actuator
+      - /api/*/actuator/**
+      - /api/notify/v1/events
+    # Header carrying the real client IP from a trusted edge. Blank = use the TCP peer address.
+    # Production sets it (see deploy/), because there every request arrives through the tunnel.
+    client-ip-header: ${CLIENT_IP_HEADER:}
 
 ---
 # Redis profile: distributed rate limiting shared across gateway instances (docker-compose uses it).

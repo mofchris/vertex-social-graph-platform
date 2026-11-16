@@ -16,7 +16,12 @@ For the requesting user U:
 3. Count mutual friends per candidate; drop U and U's existing friends.
 4. Rank by mutual-friend count.
 5. Confirm eligibility for the top candidates (not already a friend, not in a block
-   relationship) and return the first `limit`.
+   relationship) and keep the first `limit`.
+6. **Cold-start fallback:** if that gives fewer than `limit` (e.g. a brand-new user with no
+   friends), top up from Graph's most-followed users (`GET /v1/popular`, which already
+   excludes the caller and blocks). Anyone already suggested, already a friend, the caller,
+   or rejected in step 5 is skipped locally; the rest must pass a relationship check (not
+   followed, no friend request either way, no block) before being suggested.
 
 ### Supernode safety (the headline edge case)
 
@@ -35,20 +40,27 @@ See `EDGE_CASES.md`: celebrity/supernode traversal, and leaking ineligible users
 ```bash
 ./mvnw spring-boot:run            # http://localhost:8085 (needs Graph reachable)
 docker compose up --build
-./mvnw test                       # Graph mocked
+./mvnw test                       # Graph mocked (plus a local stub server for the client)
 ```
 
 ## API
 
 | Method | Path                          | Description                                  |
 |--------|-------------------------------|----------------------------------------------|
-| GET    | `/v1/recommendations?limit=`  | People you may know, ranked by mutual friends |
+| GET    | `/v1/recommendations?limit=`  | People you may know, ranked by mutual friends, topped up with popular users |
 
 Requires `Authorization: Bearer <token>`. Response:
 
 ```json
-{ "items": [ { "userId": "...", "mutualFriends": 4 }, ... ] }
+{ "items": [
+    { "userId": "...", "mutualFriends": 4, "reason": "MUTUAL_FRIENDS" },
+    { "userId": "...", "mutualFriends": 0, "reason": "POPULAR" }
+] }
 ```
+
+`reason` says why someone is suggested so the UI can be honest about it: `MUTUAL_FRIENDS`
+(friends-of-friends, ranked first) or `POPULAR` (cold-start fallback, in Graph's
+most-followed order, always `mutualFriends: 0`).
 
 Observability: `GET /actuator/health`, `GET /actuator/prometheus`.
 
@@ -59,8 +71,12 @@ Observability: `GET /actuator/health`, `GET /actuator/prometheus`.
   top candidates only — keeping the call count bounded.
 - **Graceful degradation.** Graph errors yield empty lists, and an unverifiable candidate is
   treated as ineligible (fail closed) rather than recommended.
-- **Cold start.** A user with no friends gets an empty list. A production system would fall
-  back to popular/onboarding suggestions here.
+- **Cold start.** A user with no friends has nothing to traverse, so the popular fallback
+  fills the list. `app.recommend.popular-fetch-limit` (default 50) is how many popular users
+  are fetched; the headroom covers ones filtered out locally.
+- **Best-effort fallback.** If `/v1/popular` (or a check during the fallback) fails, a
+  warning is logged and the friends-of-friends results are returned as they are. The
+  fallback never turns into a 500.
 - **Precompute (next step).** Live FoF is fine at demo scale; at real scale these would be
   precomputed for hot users and cached.
 
@@ -68,7 +84,7 @@ Observability: `GET /actuator/health`, `GET /actuator/prometheus`.
 
 ```
 src/main/java/com/vertex/recommend/
-├── client/      GraphClient (friends + eligibility)
+├── client/      GraphClient (friends, eligibility, popular users)
 ├── config/      JwtProperties, SecurityConfig
 ├── security/    JwtService (verify-only), JwtAuthenticationFilter
 ├── service/     RecommendationService (friends-of-friends)

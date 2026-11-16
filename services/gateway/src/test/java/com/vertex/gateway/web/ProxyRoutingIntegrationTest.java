@@ -66,6 +66,7 @@ class ProxyRoutingIntegrationTest {
         int port = stub.getAddress().getPort();
         registry.add("app.gateway.routes.echo", () -> "http://localhost:" + port);
         registry.add("app.gateway.routes.identity", () -> "http://localhost:" + port);
+        registry.add("app.gateway.routes.notify", () -> "http://localhost:" + port);
         registry.add("app.gateway.routes.dead", () -> "http://localhost:1"); // nothing listens here
     }
 
@@ -81,6 +82,8 @@ class ProxyRoutingIntegrationTest {
         mvc.perform(get("/api/echo/v1/ping?x=1").header("Authorization", bearer(UUID.randomUUID())))
                 .andExpect(status().isOk())
                 .andExpect(header().string("X-Downstream", "stub"))    // downstream header passed back
+                .andExpect(header().string("Server-Timing", org.hamcrest.Matchers.matchesPattern(
+                        "gateway;dur=\\d+\\.\\d, upstream;desc=\"echo\";dur=\\d+\\.\\d")))
                 .andExpect(content().string(containsString("GET /v1/ping?x=1")))
                 .andExpect(content().string(containsString("auth=yes"))); // token reached downstream
     }
@@ -108,6 +111,20 @@ class ProxyRoutingIntegrationTest {
     void unreachableDownstreamIsBadGateway() throws Exception {
         mvc.perform(get("/api/dead/v1/x").header("Authorization", bearer(UUID.randomUUID())))
                 .andExpect(status().isBadGateway());
+    }
+
+    @Test
+    void blockedPathsAreNeverForwarded() throws Exception {
+        String token = bearer(UUID.randomUUID());
+        mvc.perform(get("/api/echo/actuator/prometheus").header("Authorization", token))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/api/echo/actuator").header("Authorization", token))
+                .andExpect(status().isNotFound());
+        mvc.perform(post("/api/notify/v1/events").content("{}").header("Authorization", token))
+                .andExpect(status().isNotFound());
+        // A neighbouring, allowed path still goes through.
+        mvc.perform(get("/api/notify/v1/notifications").header("Authorization", token))
+                .andExpect(status().isOk());
     }
 
     @Test

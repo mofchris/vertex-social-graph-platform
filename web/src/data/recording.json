@@ -1,0 +1,430 @@
+{
+  "recordedAt": "2026-11-07T10:51:37.302Z",
+  "me": {
+    "userId": "83d462ec-e35b-4c2c-8faf-bf1c869d692c",
+    "displayName": "Visitor"
+  },
+  "partner": {
+    "userId": "9011da91-fcb2-4efd-927b-d9f58d5c7201",
+    "displayName": "Reese Mensah"
+  },
+  "steps": {
+    "follow": {
+      "kind": "follow",
+      "title": "You follow Reese Mensah",
+      "state": "done",
+      "hops": [
+        {
+          "id": "browser",
+          "label": "Browser",
+          "start": 0,
+          "end": 141,
+          "mark": "141 ms round trip"
+        },
+        {
+          "id": "gateway",
+          "label": "Gateway",
+          "start": 3.950000000000003,
+          "end": 137.05,
+          "mark": "133 ms in gateway"
+        },
+        {
+          "id": "graph",
+          "label": "Graph",
+          "start": 25.450000000000017,
+          "end": 137.05,
+          "mark": "112 ms in graph"
+        },
+        {
+          "id": "outbox",
+          "label": "Outbox",
+          "start": 137.05,
+          "end": 1885.05,
+          "mark": "1.75 s until the relay sent it"
+        },
+        {
+          "id": "kafka",
+          "label": "Kafka",
+          "start": 1885.05,
+          "end": 1940.05,
+          "mark": "p0 offset 548, consumed in 55 ms"
+        },
+        {
+          "id": "notify",
+          "label": "Notify",
+          "start": 1940.05,
+          "end": 1940.05,
+          "mark": "new id: ledger row + notification"
+        },
+        {
+          "id": "partner",
+          "label": "Partner",
+          "start": 1988,
+          "end": 1988,
+          "mark": "arrived 1.99 s after the click"
+        }
+      ],
+      "meta": [
+        [
+          "event id",
+          "6cdab6e6-938d-4414-a924-4b9530bc0c58"
+        ],
+        [
+          "topic",
+          "social.events, partition 0"
+        ],
+        [
+          "offset",
+          "548"
+        ],
+        [
+          "outbox wait",
+          "1.75 s"
+        ],
+        [
+          "click to push",
+          "1.99 s"
+        ]
+      ],
+      "note": "Graph committed the follow and outbox row 6cdab6e6 together. The relay published it, Notify had never seen that id, so it wrote one ledger row and one notification and pushed it to Reese Mensah."
+    },
+    "followBack": {
+      "kind": "followBack",
+      "title": "Reese Mensah follows you back",
+      "state": "done",
+      "hops": [
+        {
+          "id": "browser",
+          "label": "Browser",
+          "start": 0,
+          "end": 52,
+          "mark": "52 ms round trip"
+        },
+        {
+          "id": "gateway",
+          "label": "Gateway",
+          "start": 3.5500000000000007,
+          "end": 48.45,
+          "mark": "45 ms in gateway"
+        },
+        {
+          "id": "graph",
+          "label": "Graph",
+          "start": 19.35,
+          "end": 48.45,
+          "mark": "29 ms in graph"
+        },
+        {
+          "id": "outbox",
+          "label": "Outbox",
+          "start": 48.45,
+          "end": 454.45,
+          "mark": "406 ms until the relay sent it"
+        },
+        {
+          "id": "kafka",
+          "label": "Kafka",
+          "start": 454.45,
+          "end": 466.45,
+          "mark": "p0 offset 549, consumed in 12 ms"
+        },
+        {
+          "id": "notify",
+          "label": "Notify",
+          "start": 466.45,
+          "end": 466.45,
+          "mark": "new id: ledger row + notification"
+        },
+        {
+          "id": "partner",
+          "label": "You",
+          "start": 469,
+          "end": 469,
+          "mark": "arrived 469 ms after the click"
+        }
+      ],
+      "meta": [
+        [
+          "event id",
+          "dea46682-5d2a-4adc-9c8e-c4a5cf6476ec"
+        ],
+        [
+          "topic",
+          "social.events, partition 0"
+        ],
+        [
+          "offset",
+          "549"
+        ],
+        [
+          "outbox wait",
+          "406 ms"
+        ],
+        [
+          "click to push",
+          "469 ms"
+        ]
+      ],
+      "note": "Graph committed the follow and outbox row dea46682 together. The relay published it, Notify had never seen that id, so it wrote one ledger row and one notification and pushed it to you."
+    },
+    "post": {
+      "kind": "post",
+      "title": "You post",
+      "state": "done",
+      "hops": [
+        {
+          "id": "browser",
+          "label": "Browser",
+          "start": 0,
+          "end": 283,
+          "mark": "283 ms round trip"
+        },
+        {
+          "id": "gateway",
+          "label": "Gateway",
+          "start": 12.25,
+          "end": 270.75,
+          "mark": "259 ms in gateway"
+        },
+        {
+          "id": "feed",
+          "label": "Feed",
+          "start": 45.25,
+          "end": 270.75,
+          "mark": "226 ms in feed"
+        },
+        {
+          "id": "partner",
+          "label": "Partner's feed",
+          "start": 419,
+          "end": 419,
+          "mark": "there on the first read after 419 ms"
+        }
+      ],
+      "meta": [
+        [
+          "post id",
+          "8795367e-342f-402c-8c0c-5d2b230172fa"
+        ],
+        [
+          "your followers",
+          "1"
+        ],
+        [
+          "fan-out",
+          "on write"
+        ]
+      ],
+      "note": "You have 1 follower, at or under Feed's threshold of 20, so Feed asked Graph for them and wrote the post into each timeline before answering."
+    },
+    "replay": {
+      "kind": "replay",
+      "title": "Replay event 6cdab6e6",
+      "state": "done",
+      "hops": [
+        {
+          "id": "browser",
+          "label": "Browser",
+          "start": 0,
+          "end": 46,
+          "mark": "46 ms round trip"
+        },
+        {
+          "id": "gateway",
+          "label": "Gateway",
+          "start": 3.9499999999999993,
+          "end": 42.05,
+          "mark": "38 ms in gateway"
+        },
+        {
+          "id": "graph",
+          "label": "Graph",
+          "start": 18.749999999999996,
+          "end": 42.05,
+          "mark": "23 ms in graph: new outbox row, same id"
+        },
+        {
+          "id": "outbox",
+          "label": "Outbox",
+          "start": 42.05,
+          "end": 306.05,
+          "mark": "published again"
+        },
+        {
+          "id": "kafka",
+          "label": "Kafka",
+          "start": 306.05,
+          "end": 311.05,
+          "mark": "delivered a second time"
+        },
+        {
+          "id": "notify",
+          "label": "Notify",
+          "start": 311.05,
+          "end": 311.05,
+          "mark": "id already in the ledger, ignored"
+        },
+        {
+          "id": "partner",
+          "label": "Partner",
+          "start": null,
+          "end": null,
+          "mark": "nothing pushed, as intended"
+        }
+      ],
+      "meta": [
+        [
+          "event id",
+          "6cdab6e6-938d-4414-a924-4b9530bc0c58"
+        ],
+        [
+          "duplicates ignored",
+          "0 before, 1 now"
+        ],
+        [
+          "original offset",
+          "548"
+        ]
+      ],
+      "note": "The same event id travelled the whole pipeline again. Notify's ledger already had it, so it counted the duplicate and wrote nothing. Reese Mensah got no second notification."
+    },
+    "poison": {
+      "kind": "poison",
+      "title": "Send a record Notify can't read",
+      "state": "done",
+      "hops": [
+        {
+          "id": "browser",
+          "label": "Browser",
+          "start": 0,
+          "end": 29,
+          "mark": "29 ms round trip"
+        },
+        {
+          "id": "gateway",
+          "label": "Gateway",
+          "start": 3.25,
+          "end": 25.75,
+          "mark": "23 ms in gateway"
+        },
+        {
+          "id": "graph",
+          "label": "Graph",
+          "start": 12.35,
+          "end": 25.75,
+          "mark": "13 ms in graph: truncated JSON queued"
+        },
+        {
+          "id": "outbox",
+          "label": "Outbox",
+          "start": 25.75,
+          "end": 697.75,
+          "mark": "published"
+        },
+        {
+          "id": "kafka",
+          "label": "Kafka",
+          "start": 697.75,
+          "end": 1307.75,
+          "mark": "partition 0, offset 551"
+        },
+        {
+          "id": "notify",
+          "label": "Notify",
+          "start": 1307.75,
+          "end": 1307.75,
+          "mark": "could not parse it",
+          "fault": true
+        },
+        {
+          "id": "dlt",
+          "label": "DLT",
+          "start": 1307.75,
+          "end": 1307.75,
+          "mark": "parked on social.events.DLT"
+        }
+      ],
+      "meta": [
+        [
+          "error",
+          "Unexpected end-of-input: was expecting closing quote for a string value\n"
+        ],
+        [
+          "from",
+          "social.events, partition 0, offset 551"
+        ],
+        [
+          "payload",
+          "{\"vertexPoison\":true,\"actorId\":\"83d462ec-e35b-4c2c-8faf-bf1c869d692c\",\"note\":\"deliberately truncat"
+        ]
+      ],
+      "note": "Notify failed to parse the record, so its error handler moved it to the dead-letter topic and committed past it. The partition kept flowing; nothing behind it was blocked."
+    }
+  },
+  "myFeed": [],
+  "myNotes": [
+    {
+      "id": "d7eeeaea-d1a5-48aa-bd30-e4ba83313072",
+      "type": "FOLLOW",
+      "targetId": null,
+      "actorCount": 1,
+      "latestActorId": "9011da91-fcb2-4efd-927b-d9f58d5c7201",
+      "read": false,
+      "updatedAt": "2026-11-07T10:51:41.020095Z"
+    }
+  ],
+  "partnerNotes": [
+    {
+      "id": "5d6724d5-6a00-4f59-985e-7a5d7c81b263",
+      "type": "FOLLOW",
+      "targetId": null,
+      "actorCount": 5,
+      "latestActorId": "83d462ec-e35b-4c2c-8faf-bf1c869d692c",
+      "read": false,
+      "updatedAt": "2026-11-07T10:51:40.105216Z"
+    }
+  ],
+  "people": [
+    {
+      "userId": "2422706a-3894-43aa-9149-41e3fa587a68",
+      "mutualFriends": 0,
+      "reason": "POPULAR"
+    },
+    {
+      "userId": "27c526d4-dd24-4fd8-9cb8-714faf2c5c1d",
+      "mutualFriends": 0,
+      "reason": "POPULAR"
+    },
+    {
+      "userId": "cbe3fea2-b59f-45cf-b1d5-f8469cfb9064",
+      "mutualFriends": 0,
+      "reason": "POPULAR"
+    },
+    {
+      "userId": "9bfa6f4a-12dd-4890-8225-fb5eb0d3dcc5",
+      "mutualFriends": 0,
+      "reason": "POPULAR"
+    },
+    {
+      "userId": "652ae984-8503-4acc-a753-402fe98b4927",
+      "mutualFriends": 0,
+      "reason": "POPULAR"
+    },
+    {
+      "userId": "a1182a78-46e4-4f1d-8da5-f241b0da0b36",
+      "mutualFriends": 0,
+      "reason": "POPULAR"
+    }
+  ],
+  "names": {
+    "d20daab2-9289-4c9d-a8ab-42ebeb7746ee": "Hayden Iwu",
+    "2422706a-3894-43aa-9149-41e3fa587a68": "Avery Okafor",
+    "27c526d4-dd24-4fd8-9cb8-714faf2c5c1d": "Casey Moreau",
+    "cbe3fea2-b59f-45cf-b1d5-f8469cfb9064": "Bailey Lindqvist",
+    "652ae984-8503-4acc-a753-402fe98b4927": "River Ferreira",
+    "a1182a78-46e4-4f1d-8da5-f241b0da0b36": "Hayden Castillo",
+    "9bfa6f4a-12dd-4890-8225-fb5eb0d3dcc5": "A private profile",
+    "83d462ec-e35b-4c2c-8faf-bf1c869d692c": "Visitor",
+    "9011da91-fcb2-4efd-927b-d9f58d5c7201": "Reese Mensah"
+  }
+}

@@ -38,6 +38,8 @@ public class OutboxEventWriter {
     @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
     public void stage(SocialEvent event) {
         String payload = JSON.writeValueAsString(event);
-        outbox.save(new OutboxEvent(TOPIC, event.recipientId().toString(), payload));
+        // OutboxEvent.of also records the actor and event id, so the caller can later see this row
+        // in their system trace (GET /v1/events/mine) and replay it.
+        outbox.save(OutboxEvent.of(TOPIC, event, payload));
     }
 }
