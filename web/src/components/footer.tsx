@@ -30,6 +30,7 @@ export function Footer() {
           </li>
         </ul>
       </div>
+      <p className="footer__sign">Built with intention.</p>
     </footer>
   );
 }

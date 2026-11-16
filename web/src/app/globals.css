@@ -340,6 +340,7 @@ html.lenis, html.lenis body { height: auto; }
 .footer__row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 1rem 2rem; margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--c-line-strong, var(--c-screen-line)); font-size: var(--t-s); }
 .footer__links { display: flex; flex-wrap: wrap; gap: 1rem 1.75rem; }
 .footer .link { color: var(--c-screen-ink); }
+.footer__sign { margin: 2rem 0 0; font-family: var(--font-archivo), "Archivo", sans-serif; font-stretch: 125%; font-weight: 700; font-size: 11px; line-height: 1; letter-spacing: .28em; margin-right: -.28em; text-transform: uppercase; color: var(--c-screen-muted); }
 
 /* ===================== DEMO CONSOLE ===================== */
 .console { padding: 1.25rem var(--gutter) 4rem; display: grid; gap: var(--gutter); }
